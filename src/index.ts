@@ -65,7 +65,7 @@ class NotebookLMMCPServer {
     this.server = new Server(
       {
         name: "notebooklm-mcp",
-        version: "1.1.5",
+        version: "1.2.0",
       },
       {
         capabilities: {
@@ -94,7 +94,7 @@ class NotebookLMMCPServer {
     this.setupShutdownHandlers();
 
     log.info("🚀 NotebookLM MCP Server initialized");
-    log.info(`  Version: 1.1.5`);
+    log.info(`  Version: 1.2.0`);
     log.info(`  Node: ${process.version}`);
     log.info(`  Platform: ${process.platform}`);
   }
@@ -625,7 +625,7 @@ async function main() {
   // Print banner
   console.error("╔══════════════════════════════════════════════════════════╗");
   console.error("║                                                          ║");
-  console.error("║           NotebookLM MCP Server v1.1.5                   ║");
+  console.error("║           NotebookLM MCP Server v1.2.0                   ║");
   console.error("║                                                          ║");
   console.error("║   Chat with Gemini 2.5 through NotebookLM via MCP       ║");
   console.error("║                                                          ║");
