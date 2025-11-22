@@ -155,4 +155,4 @@ Or directly propose a PR to improve the documentation!
 ---
 
 **Documentation updated:** 2025-11-22
-**Version:** 1.1.4
+**Version:** 1.1.5
