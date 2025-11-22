@@ -394,7 +394,7 @@ If all checks are ✅, you're ready! 🎉
 
 ## ▶️ Startup
 
-### First Startup
+### Method 1: Foreground Mode (Development)
 
 ```powershell
 npm run start:http
@@ -414,6 +414,55 @@ npm run start:http
 ```
 
 **The server is started!** 🚀
+
+⚠️ **Note:** The terminal must stay open. Press `Ctrl+C` to stop.
+
+---
+
+### Method 2: Background Daemon Mode (Production) ⭐
+
+**For production use, run the server in background without keeping the terminal open:**
+
+```powershell
+# Start server in background
+npm run daemon:start
+
+# Check status
+npm run daemon:status
+
+# View logs in real-time
+npm run daemon:logs
+
+# Stop server
+npm run daemon:stop
+```
+
+**Expected result:**
+```
+[PM2] App [notebooklm-http] launched (1 instances)
+┌────┬─────────────────┬──────┬─────────┬────────┐
+│ id │ name            │ mode │ status  │ uptime │
+├────┼─────────────────┼──────┼─────────┼────────┤
+│ 0  │ notebooklm-http │ fork │ online  │ 0s     │
+└────┴─────────────────┴──────┴─────────┴────────┘
+```
+
+**Advantages of daemon mode:**
+- ✅ Runs in background (no terminal window)
+- ✅ Auto-restart on crash
+- ✅ Logs saved to `logs/pm2-*.log`
+- ✅ Survives terminal close
+
+**Daemon management commands:**
+
+```powershell
+npm run daemon:start    # Start server
+npm run daemon:stop     # Stop server
+npm run daemon:restart  # Restart server
+npm run daemon:logs     # View logs (Ctrl+C to exit)
+npm run daemon:status   # Check status
+npm run daemon:delete   # Remove from PM2 list
+```
 
 ### Health Test
 

@@ -78,7 +78,11 @@
 | Command | Description |
 |----------|-------------|
 | `npm run build` | Compile TypeScript |
-| `npm run start:http` | Start HTTP server |
+| `npm run start:http` | Start HTTP server (foreground) |
+| `npm run daemon:start` | Start server in background (daemon mode) |
+| `npm run daemon:stop` | Stop background server |
+| `npm run daemon:logs` | View background server logs |
+| `npm run daemon:status` | Check daemon status |
 | `npm run dev:http` | Development mode (auto-reload) |
 | `npm run setup-auth` | Configure Google authentication |
 | `.\deployment\scripts\setup-auth.ps1` | PowerShell authentication script |
