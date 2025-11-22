@@ -272,21 +272,18 @@ Get-Process node | Where-Object {$_.Path -like "*node.exe*"} | Stop-Process
 ### With PM2 (Recommended for Production)
 
 ```bash
-# Install PM2
-npm install -g pm2
-
-# Start
-pm2 start dist/http-wrapper.js --name notebooklm-http
+# Start (PM2 is included as dev dependency)
+npm run daemon:start
 
 # Auto-restart on boot
 pm2 startup
 pm2 save
 
 # Manage
-pm2 list
-pm2 logs notebooklm-http
-pm2 restart notebooklm-http
-pm2 stop notebooklm-http
+npm run daemon:status    # View status
+npm run daemon:logs      # View logs
+npm run daemon:restart   # Restart
+npm run daemon:stop      # Stop
 ```
 
 ---

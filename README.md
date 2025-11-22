@@ -575,7 +575,7 @@ Future features planned for upcoming releases:
 
 **Planned options:**
 - **PM2 integration** (Recommended): Cross-platform process manager with auto-restart, monitoring, and logs
-  - Simple setup: `pm2 start npm --name "notebooklm-http" -- run start:http`
+  - Simple setup: `npm run daemon:start` (uses PM2 with optimized config)
   - Automatic startup on system boot
   - Built-in log rotation and monitoring
 - **Windows Service**: Native Windows service installation via `nssm` or `node-windows`

@@ -16,7 +16,7 @@
 
 module.exports = {
   apps: [{
-    name: 'notebooklm-http',
+    name: 'notebooklm-mcp',
     script: 'dist/http-wrapper.js',
 
     // Instance configuration

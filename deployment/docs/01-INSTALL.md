@@ -439,12 +439,12 @@ npm run daemon:stop
 
 **Expected result:**
 ```
-[PM2] App [notebooklm-http] launched (1 instances)
-┌────┬─────────────────┬──────┬─────────┬────────┐
-│ id │ name            │ mode │ status  │ uptime │
-├────┼─────────────────┼──────┼─────────┼────────┤
-│ 0  │ notebooklm-http │ fork │ online  │ 0s     │
-└────┴─────────────────┴──────┴─────────┴────────┘
+[PM2] App [notebooklm-mcp] launched (1 instances)
+┌────┬────────────────┬──────┬─────────┬────────┐
+│ id │ name           │ mode │ status  │ uptime │
+├────┼────────────────┼──────┼─────────┼────────┤
+│ 0  │ notebooklm-mcp │ fork │ online  │ 0s     │
+└────┴────────────────┴──────┴─────────┴────────┘
 ```
 
 **Advantages of daemon mode:**
