@@ -325,18 +325,39 @@ Share: **⚙️ Share → Anyone with link → Copy**
 
 ---
 
-## Alternative: Claude Code Skill
+## Related Project: Claude Code Skill (by original author)
 
-**Prefer Claude Code Skills over MCP?** This server is now also available as a native Claude Code Skill with a simpler setup:
+The original author [PleasePrompto](https://github.com/PleasePrompto) also created a **Python-based Claude Code Skill** as an alternative approach:
 
-**NotebookLM Claude Code Skill** - Available separately for advanced Claude Code workflows
+🔗 **[NotebookLM Claude Code Skill](https://github.com/PleasePrompto/notebooklm-skill)** - Python skill for Claude Code
 
-**Key differences:**
-- **MCP Server** (this repo): Persistent sessions, works with Claude Code, Codex, Cursor, and other MCP clients
-- **HTTP REST API** (this repo): Works with n8n, Zapier, Make.com, any HTTP client
-- **Claude Code Skill**: Simpler setup, Python-based, stateless queries, works only with local Claude Code
+### When to use which approach?
 
-All use the same browser automation technology and provide zero-hallucination answers from your NotebookLM notebooks.
+| Feature | This Project (MCP + HTTP) | Original Skill (Python) |
+|---------|---------------------------|-------------------------|
+| **Protocol** | MCP (Model Context Protocol) | Claude Skills |
+| **Installation** | `claude mcp add notebooklm npx @roomi-fields/notebooklm-mcp` | Clone to `~/.claude/skills/` |
+| **Sessions** | ✅ Persistent browser sessions | Fresh browser per query |
+| **Compatibility** | ✅ Claude Code, Cursor, Codex, any MCP client | Claude Code only |
+| **HTTP API** | ✅ Works with n8n, Zapier, Make.com | ❌ Not available |
+| **Language** | TypeScript | Python |
+| **Use case** | Long conversations, automation workflows | Quick one-off queries |
+
+### Which one should you choose?
+
+- **Use this MCP project** if you want:
+  - Persistent sessions (faster repeated queries)
+  - Compatibility with multiple tools (Cursor, Codex, etc.)
+  - HTTP REST API for n8n/Zapier automation
+  - TypeScript-based development
+
+- **Use the original Skill** if you prefer:
+  - Python-based workflow
+  - Simpler clone-and-use installation
+  - Stateless queries (no session management)
+  - Only using Claude Code locally
+
+Both use the same Patchright browser automation technology and provide zero-hallucination answers from NotebookLM.
 
 ---
 
