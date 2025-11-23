@@ -575,30 +575,12 @@ if ($testNotebookUrl) {
 # =============================================================================
 Write-TestHeader "DELETE /notebooks/:id - Delete a notebook" 11 $TotalTests
 
-# Use the notebook created in test 3, or find a test notebook
-$notebookToDelete = $null
-
+# ONLY delete the notebook created in test 3 (never delete existing notebooks)
 if ($script:notebookToDelete) {
-    # Use the notebook created in test 3
-    Write-Info "Deleting notebook added in test 3: $($script:notebookToDelete)"
-    $notebookToDelete = @{ id = $script:notebookToDelete }
-} elseif ($notebooks.data.notebooks.Count -gt 1) {
-    # Otherwise find a test notebook (with suffix -1, -2, etc.)
-    $notebookToDelete = $notebooks.data.notebooks | Where-Object {
-        $_.id -match '-\d+$'
-    } | Select-Object -First 1
-
-    if (-not $notebookToDelete) {
-        # Otherwise take the last one (not the first which could be active)
-        $notebookToDelete = $notebooks.data.notebooks[-1]
-    }
-}
-
-if ($notebookToDelete) {
     try {
-        Write-Info "Deleting notebook: $($notebookToDelete.id) ($($notebookToDelete.name))"
+        Write-Info "Deleting notebook added in test 3: $($script:notebookToDelete)"
 
-        $delete = Invoke-RestMethod -Uri "$BaseUrl/notebooks/$($notebookToDelete.id)" -Method Delete
+        $delete = Invoke-RestMethod -Uri "$BaseUrl/notebooks/$($script:notebookToDelete)" -Method Delete
 
         if ($delete.success) {
             Write-Success "Notebook deleted successfully"
@@ -610,7 +592,7 @@ if ($notebookToDelete) {
             $countAfter = $notebooksAfter.data.notebooks.Count
             Write-Success "Remaining notebooks: $countAfter"
 
-            if ($notebooksAfter.data.notebooks.id -notcontains $notebookToDelete.id) {
+            if ($notebooksAfter.data.notebooks.id -notcontains $script:notebookToDelete) {
                 Write-Success "Verification: notebook was successfully deleted"
             } else {
                 Write-Error-Custom "Verification failed: notebook still exists"
@@ -626,8 +608,8 @@ if ($notebookToDelete) {
         $FailedTests++
     }
 } else {
-    Write-Info "Cannot delete a notebook (only one available or none)"
-    Write-Info "To test DELETE, add multiple notebooks first"
+    Write-Info "Test skipped: No notebook was added in test 3 (no URL provided)"
+    Write-Info "To test DELETE, provide a NotebookLM URL when prompted at the beginning"
 }
 
 # =============================================================================
