@@ -191,6 +191,7 @@ export class NotebookLibrary {
       last_used: new Date().toISOString(),
       use_count: 0,
       tags: input.tags || [],
+      auto_generated: input.auto_generated || false,
     };
 
     // Add to library

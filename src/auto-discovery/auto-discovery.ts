@@ -173,11 +173,23 @@ OUTPUT ONLY VALID JSON. NO OTHER TEXT.`;
       );
     }
 
-    // Validate description: <= 150 chars
+    // Auto-truncate description if too long (NotebookLM doesn't always respect the limit)
     if (metadata.description.length > 150) {
-      throw new Error(
-        `Description too long: ${metadata.description.length} chars (max 150). Description: "${metadata.description}"`
+      log.warning(
+        `⚠️  Description too long (${metadata.description.length} chars), truncating to 150...`
       );
+      // Truncate at last complete sentence before 147 chars (leave room for "...")
+      let truncated = metadata.description.substring(0, 147);
+      const lastPeriod = truncated.lastIndexOf('.');
+      if (lastPeriod > 50) {
+        // Keep complete sentence if it's not too short
+        truncated = truncated.substring(0, lastPeriod + 1);
+      } else {
+        // Otherwise just truncate and add ...
+        truncated = truncated.trim() + '...';
+      }
+      metadata.description = truncated;
+      log.dim(`   Truncated to: "${truncated}"`);
     }
 
     // Validate tags: 8-10 elements

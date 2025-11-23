@@ -167,6 +167,37 @@ Analyze your complete content and respond ONLY in JSON format:
 ```
 → Verify notebook is shared with "Anyone with link"
 
+## Testing
+
+### Public Test Notebooks
+
+The following public notebooks are available for testing auto-discovery:
+
+```bash
+# Test with PowerShell script (all notebooks)
+.\deployment\scripts\test-auto-discovery.ps1 -TestAll
+
+# Test with specific notebook
+.\deployment\scripts\test-auto-discovery.ps1 -NotebookUrl "https://notebooklm.google.com/notebook/0d5cd576-2583-4835-8848-a5b7b6a97cea"
+```
+
+**Available public notebooks**:
+1. `https://notebooklm.google.com/notebook/0d5cd576-2583-4835-8848-a5b7b6a97cea`
+2. `https://notebooklm.google.com/notebook/505ee4b1-ad05-4673-a06b-1ec106c2b940`
+3. `https://notebooklm.google.com/notebook/a09e40ad-d41f-43af-a3ca-5fc82bd459e5`
+4. `https://notebooklm.google.com/notebook/19bde485-a9c1-4809-8884-e872b2b67b44`
+5. `https://notebooklm.google.com/notebook/19fdf6bd-1975-40a3-9801-c554130bc64a`
+
+### Expected Results
+
+Each auto-discovery test should:
+- ✅ Return 200 OK
+- ✅ Generate valid kebab-case name (1-3 words)
+- ✅ Generate description ≤150 chars
+- ✅ Generate 8-10 relevant topics
+- ✅ Set `auto_generated: true`
+- ✅ Add notebook to library automatically
+
 ## Future Enhancements
 
 ### Phase 2: Smart Refresh

@@ -26,6 +26,9 @@ CLAUDE.md
 *.swo
 *~
 
+# GitHub workflows (local development only)
+.github/
+
 # OS
 .DS_Store
 Thumbs.db
