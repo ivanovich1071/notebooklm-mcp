@@ -39,6 +39,7 @@ screenshots/
 *.tar.gz
 mcp-add-command.txt
 docs/why-notebooklm.md
+auto-discovery-complet.md
 
 # Publishing scripts and documentation (local use only)
 publish/
