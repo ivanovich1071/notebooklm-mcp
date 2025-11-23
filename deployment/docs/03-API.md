@@ -23,6 +23,7 @@ Or for network access: `http://<SERVER-IP>:3000`
 | `POST` | `/setup-auth` | Configure authentication |
 | `GET` | `/notebooks` | List all notebooks |
 | `POST` | `/notebooks` | Add a notebook (with validation) |
+| `POST` | `/notebooks/auto-discover` | Auto-generate notebook metadata |
 | `GET` | `/notebooks/:id` | Notebook details |
 | `DELETE` | `/notebooks/:id` | Delete a notebook |
 | `PUT` | `/notebooks/:id/activate` | Activate a notebook (default) |
@@ -315,7 +316,79 @@ curl -X POST http://localhost:3000/notebooks \
 
 ---
 
-## 6. Get Notebook
+## 6. Auto-Discover Notebook
+
+### `POST /notebooks/auto-discover`
+
+Automatically generate notebook metadata by querying NotebookLM itself.
+
+**Request:**
+```json
+{
+  "url": "https://notebooklm.google.com/notebook/abc123"
+}
+```
+
+**Response (Success):**
+```json
+{
+  "success": true,
+  "notebook": {
+    "id": "generated-uuid",
+    "url": "https://notebooklm.google.com/notebook/abc123",
+    "name": "cnv-pratique-essentiels",
+    "description": "Manuel CNV couvrant 4 étapes fondamentales. Inclut exercices d'auto-empathie et écoute.",
+    "tags": [
+      "cnv",
+      "empathie",
+      "communication",
+      "besoins",
+      "sentiments",
+      "demandes",
+      "conflits",
+      "authenticité"
+    ],
+    "auto_generated": true,
+    "created_at": "2025-01-23T10:00:00Z"
+  },
+  "message": "Notebook auto-discovered and added to library"
+}
+```
+
+**Response (Error):**
+```json
+{
+  "error": "NotebookLM returned invalid metadata format",
+  "details": "Invalid name format: \"Invalid Name\". Must be kebab-case, 3 words max."
+}
+```
+
+**Errors:**
+- `400 Bad Request`: Invalid URL format
+- `404 Not Found`: Notebook not accessible
+- `500 Internal Server Error`: NotebookLM query failed or returned invalid format
+- `504 Gateway Timeout`: NotebookLM query timeout (>30s)
+
+**How it works:**
+
+1. System opens the specified notebook
+2. Sends prompt to NotebookLM asking it to analyze its own content
+3. NotebookLM responds with JSON containing name, description, and tags
+4. System validates the metadata format
+5. Saves notebook to library with auto-generated metadata
+
+**Progressive Disclosure Pattern:**
+
+This endpoint enables the **Level 0** of progressive disclosure:
+- Metadata stored locally (lightweight, ~100 bytes per notebook)
+- Loaded at startup for instant matching
+- Deep queries to NotebookLM only when notebook is selected
+
+Orchestrators (Claude Code, n8n, Cursor) can scan all notebook metadata without rate limit concerns, then query NotebookLM only for the most relevant notebook.
+
+---
+
+## 7. Get Notebook
 
 ### `GET /notebooks/:id`
 
@@ -353,7 +426,7 @@ curl http://localhost:3000/notebooks/parents-numerique
 
 ---
 
-## 7. Delete Notebook
+## 8. Delete Notebook
 
 ### `DELETE /notebooks/:id`
 
@@ -390,7 +463,7 @@ curl -X DELETE http://localhost:3000/notebooks/parents-numerique
 
 ---
 
-## 8. Activate Notebook
+## 9. Activate Notebook
 
 ### `PUT /notebooks/:id/activate`
 
@@ -435,7 +508,7 @@ curl -X PUT http://localhost:3000/notebooks/shakespeare/activate
 
 ---
 
-## 9. List Sessions
+## 10. List Sessions
 
 ### `GET /sessions`
 
@@ -469,7 +542,7 @@ curl http://localhost:3000/sessions
 
 ---
 
-## 10. Close Session
+## 11. Close Session
 
 ### `DELETE /sessions/:id`
 

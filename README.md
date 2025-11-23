@@ -2,6 +2,8 @@
 
 # NotebookLM MCP Server
 
+> **Forked from** [PleasePrompto/notebooklm-mcp](https://github.com/PleasePrompto/notebooklm-mcp)
+
 **Chat directly with NotebookLM for zero-hallucination answers based on your own notebooks**
 
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.x-blue.svg)](https://www.typescriptlang.org/)
@@ -216,6 +218,69 @@ Perfect for n8n workflows:
 ```
 
 **👉 n8n guide:** [deployment/docs/04-N8N-INTEGRATION.md](./deployment/docs/04-N8N-INTEGRATION.md)
+
+---
+
+## 🔍 Auto-Discovery : Self-Organizing Documentation
+
+NotebookLM MCP is the **only MCP server** with autonomous resource discovery.
+
+### How it works
+
+**1. Add notebook** (zero manual metadata):
+```bash
+curl -X POST http://localhost:3000/notebooks/auto-discover \
+  -H "Content-Type: application/json" \
+  -d '{"url": "https://notebooklm.google.com/notebook/YOUR_ID"}'
+```
+
+**2. System queries NotebookLM** to auto-generate:
+- Kebab-case name (3 words max)
+- Concise description (2 sentences)
+- Relevant tags (8-10 keywords)
+
+**3. Orchestrators discover autonomously**:
+- Claude Code finds relevant docs without prompting
+- n8n workflows auto-select documentation
+- Cursor matches context to notebooks
+
+### Progressive disclosure pattern
+
+Inspired by [Claude Skills best practices](https://platform.claude.com/docs/en/agents-and-tools/agent-skills/best-practices#progressive-disclosure-patterns):
+
+- **Level 0** (startup): Lightweight metadata loaded (~500 tokens)
+- **Level 1** (matching): Local tag/description search (0 NotebookLM queries)
+- **Level 2** (deep query): Targeted NotebookLM query only when needed
+
+### Why this matters
+
+**Before**: Manual library management, orchestrators can't discover resources autonomously
+
+**After**: Self-organizing library, autonomous documentation discovery
+
+Perfect for:
+- ✅ Teams with 10+ documentation notebooks
+- ✅ n8n workflows needing dynamic doc access
+- ✅ Claude Code autonomous research
+- ✅ Onboarding new developers without manual setup
+
+### Example workflow
+
+```bash
+# 1. Add documentation notebooks (auto-discover metadata)
+curl -X POST /notebooks/auto-discover -d '{"url": "https://notebooklm.google.com/notebook/n8n-docs"}'
+curl -X POST /notebooks/auto-discover -d '{"url": "https://notebooklm.google.com/notebook/react-guide"}'
+
+# 2. Claude Code autonomously discovers relevant notebook
+User: "Build Gmail automation with n8n"
+→ System matches: "n8n-docs" (tags: ["n8n", "gmail", "automation"])
+→ Query NotebookLM: "Gmail node configuration?"
+→ Claude implements with accurate info
+
+# 3. Zero hallucinations, zero manual intervention
+```
+
+---
 
 ### Background Daemon Mode
 

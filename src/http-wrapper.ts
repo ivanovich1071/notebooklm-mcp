@@ -10,6 +10,7 @@ import { AuthManager } from './auth/auth-manager.js';
 import { SessionManager } from './session/session-manager.js';
 import { NotebookLibrary } from './library/notebook-library.js';
 import { ToolHandlers } from './tools/index.js';
+import { AutoDiscovery } from './auto-discovery/auto-discovery.js';
 import { log } from './utils/logger.js';
 
 const app = express();
@@ -150,6 +151,78 @@ app.delete('/notebooks/:id', async (req: Request, res: Response) => {
   try {
     const result = await toolHandlers.handleRemoveNotebook({ id: req.params.id });
     res.json(result);
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      error: error instanceof Error ? error.message : String(error)
+    });
+  }
+});
+
+// Auto-discover notebook metadata
+app.post('/notebooks/auto-discover', async (req: Request, res: Response) => {
+  try {
+    const { url } = req.body;
+
+    // Validate URL is provided
+    if (!url) {
+      return res.status(400).json({
+        success: false,
+        error: 'Missing required field: url'
+      });
+    }
+
+    // Validate it's a NotebookLM URL
+    if (!url.includes('notebooklm.google.com')) {
+      return res.status(400).json({
+        success: false,
+        error: 'Invalid URL: must be a NotebookLM URL (notebooklm.google.com)'
+      });
+    }
+
+    // Create AutoDiscovery instance and discover metadata
+    const autoDiscovery = new AutoDiscovery(sessionManager);
+
+    let metadata;
+    try {
+      metadata = await autoDiscovery.discoverMetadata(url);
+    } catch (error) {
+      return res.status(500).json({
+        success: false,
+        error: `Failed to discover metadata: ${error instanceof Error ? error.message : String(error)}`
+      });
+    }
+
+    // Transform metadata to NotebookLibrary format
+    // - tags → topics (rename field)
+    // - Add default content_types
+    // - Add default use_cases based on first few tags
+    const notebookInput = {
+      url,
+      name: metadata.name,
+      description: metadata.description,
+      topics: metadata.tags, // tags → topics
+      content_types: ['documentation'],
+      use_cases: metadata.tags.slice(0, 3), // Use first 3 tags as use cases
+      auto_generated: true
+    };
+
+    // Add notebook to library
+    let notebook;
+    try {
+      notebook = await library.addNotebook(notebookInput);
+    } catch (error) {
+      return res.status(500).json({
+        success: false,
+        error: `Failed to add notebook to library: ${error instanceof Error ? error.message : String(error)}`
+      });
+    }
+
+    // Return success with created notebook
+    res.json({
+      success: true,
+      notebook
+    });
   } catch (error) {
     res.status(500).json({
       success: false,
