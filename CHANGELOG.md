@@ -7,6 +7,49 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.3.3] - 2025-01-26
+
+### Security
+
+**CORS Hardening:**
+- Added CORS whitelist configuration via `CORS_ORIGINS` environment variable
+- Default whitelist allows only localhost origins (ports 3000, 5678, 8080)
+- Blocked external origins no longer receive CORS headers
+- Supports wildcard `*` for development when explicitly configured
+
+**Input Validation:**
+- Added Zod schema validation for all HTTP endpoints
+- Validates request bodies with detailed error messages
+- Schemas: AskQuestionSchema, AddNotebookSchema, UpdateNotebookSchema, AutoDiscoverSchema, CleanupDataSchema, ShowBrowserSchema
+
+**Express Route Security:**
+- Fixed route ordering: static routes (`/notebooks/search`, `/notebooks/stats`) now correctly matched before parameterized routes (`/notebooks/:id`)
+- Prevents route hijacking vulnerabilities
+
+### Fixed
+
+**Error Handling:**
+- Replaced 30+ empty catch blocks with proper `log.debug()` logging
+- Improved error visibility for debugging without breaking functionality
+
+**Type Safety:**
+- Refactored `ToolResult<T>` to discriminated union type for compile-time safety
+- Fixed `ServerState` types with proper `Browser`, `SessionManager`, `AuthManager` types
+- Added `JSONSchemaProperty` type for MCP tool input schemas
+- Added config validation with constraint checking (min/max ranges, positive values)
+- Fixed `parseProfileStrategy` to avoid unsafe `as any` type assertions
+
+### Added
+
+**Test Coverage (25 → 72 tests, +188%):**
+- `test-validation.ps1` (18 tests) - Zod schema validation testing
+- `test-auth.ps1` (8 tests) - Authentication endpoint testing
+- `test-cors.ps1` (10 tests) - CORS configuration testing
+- `test-sessions.ps1` (10 tests) - Session management testing
+- Fixed `test-errors.ps1` pattern matching for Zod validation messages
+
+---
+
 ## [1.3.2] - 2025-01-24
 
 ### Added
