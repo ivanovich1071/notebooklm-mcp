@@ -6,7 +6,6 @@
  */
 
 import express, { Request, Response } from 'express';
-import { z } from 'zod';
 import { AuthManager } from './auth/auth-manager.js';
 import { SessionManager } from './session/session-manager.js';
 import { NotebookLibrary } from './library/notebook-library.js';
@@ -14,120 +13,15 @@ import { ToolHandlers } from './tools/index.js';
 import { AutoDiscovery } from './auto-discovery/auto-discovery.js';
 import { log } from './utils/logger.js';
 
-// ============================================================================
-// Request Validation Schemas (Zod)
-// ============================================================================
-
-const AskQuestionSchema = z.object({
-  question: z.string().min(1, 'Question cannot be empty'),
-  session_id: z.string().optional(),
-  notebook_id: z.string().optional(),
-  notebook_url: z.string().url().optional(),
-  show_browser: z.boolean().optional(),
-});
-
-const AddNotebookSchema = z.object({
-  url: z.string().url().refine(
-    (url) => url.includes('notebooklm.google.com'),
-    'Must be a NotebookLM URL (notebooklm.google.com)'
-  ),
-  name: z.string().min(1, 'Name cannot be empty'),
-  description: z.string().min(1, 'Description cannot be empty'),
-  topics: z.array(z.string()).min(1, 'At least one topic required'),
-  content_types: z.array(z.string()).optional(),
-  use_cases: z.array(z.string()).optional(),
-  tags: z.array(z.string()).optional(),
-});
-
-const UpdateNotebookSchema = z.object({
-  name: z.string().min(1).optional(),
-  description: z.string().min(1).optional(),
-  topics: z.array(z.string()).optional(),
-  content_types: z.array(z.string()).optional(),
-  use_cases: z.array(z.string()).optional(),
-  tags: z.array(z.string()).optional(),
-});
-
-const AutoDiscoverSchema = z.object({
-  url: z.string().url().refine(
-    (url) => url.includes('notebooklm.google.com'),
-    'Must be a NotebookLM URL (notebooklm.google.com)'
-  ),
-});
-
-const CleanupDataSchema = z.object({
-  confirm: z.boolean(),
-  preserve_library: z.boolean().optional(),
-});
-
-const ShowBrowserSchema = z.object({
-  show_browser: z.boolean().optional(),
-});
-
-/**
- * Validate request body against a Zod schema
- * Returns parsed data on success, sends error response on failure
- */
-function validateBody<T>(
-  schema: z.ZodSchema<T>,
-  body: unknown,
-  res: Response,
-  endpoint: string
-): T | null {
-  const result = schema.safeParse(body);
-  if (!result.success) {
-    const errors = result.error.errors.map(e => `${e.path.join('.')}: ${e.message}`).join(', ');
-    log.warning(`[HTTP] Validation error ${endpoint}: ${errors}`);
-    res.status(400).json({
-      success: false,
-      error: `Validation error: ${errors}`,
-    });
-    return null;
-  }
-  return result.data;
-}
-
 const app = express();
 app.use(express.json());
 
-// CORS configuration - configurable via environment variable
-// Default: localhost only. Set CORS_ORIGINS to comma-separated list for production
-const getAllowedOrigins = (): string[] => {
-  const envOrigins = process.env.CORS_ORIGINS;
-  if (envOrigins) {
-    return envOrigins.split(',').map(origin => origin.trim());
-  }
-  // Default: allow localhost on common ports
-  return [
-    'http://localhost:3000',
-    'http://localhost:5678', // n8n default port
-    'http://localhost:8080',
-    'http://127.0.0.1:3000',
-    'http://127.0.0.1:5678',
-    'http://127.0.0.1:8080',
-  ];
-};
-
-const allowedOrigins = getAllowedOrigins();
-const isOriginAllowed = (origin: string | undefined): boolean => {
-  if (!origin) return true; // Allow requests without origin (same-origin, curl, etc.)
-  // Allow all origins if wildcard is explicitly configured
-  if (allowedOrigins.includes('*')) return true;
-  return allowedOrigins.includes(origin);
-};
-
-app.use((req, res, next) => {
-  const origin = req.headers.origin;
-
-  if (isOriginAllowed(origin)) {
-    res.header('Access-Control-Allow-Origin', origin || '*');
-    res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
-    res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization');
-  } else {
-    log.warning(`[CORS] Blocked request from origin: ${origin}`);
-  }
-
-  if (req.method === 'OPTIONS') {
+// CORS for n8n
+app.use((_req, res, next) => {
+  res.header('Access-Control-Allow-Origin', '*');
+  res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+  res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  if (_req.method === 'OPTIONS') {
     return res.sendStatus(200);
   }
   next();
@@ -155,11 +49,17 @@ app.get('/health', async (_req: Request, res: Response) => {
 // Ask question
 app.post('/ask', async (req: Request, res: Response) => {
   try {
-    const validated = validateBody(AskQuestionSchema, req.body, res, 'POST /ask');
-    if (!validated) return;
+    const { question, session_id, notebook_id, notebook_url, show_browser } = req.body;
+
+    if (!question) {
+      return res.status(400).json({
+        success: false,
+        error: 'Missing required field: question'
+      });
+    }
 
     const result = await toolHandlers.handleAskQuestion(
-      validated,
+      { question, session_id, notebook_id, notebook_url, show_browser },
       async (message, progress, total) => {
         log.info(`Progress: ${message} (${progress}/${total})`);
       }
@@ -177,11 +77,10 @@ app.post('/ask', async (req: Request, res: Response) => {
 // Setup auth
 app.post('/setup-auth', async (req: Request, res: Response) => {
   try {
-    const validated = validateBody(ShowBrowserSchema, req.body, res, 'POST /setup-auth');
-    if (!validated) return;
+    const { show_browser } = req.body;
 
     const result = await toolHandlers.handleSetupAuth(
-      validated,
+      { show_browser },
       async (message, progress, total) => {
         log.info(`Progress: ${message} (${progress}/${total})`);
       }
@@ -212,11 +111,10 @@ app.post('/de-auth', async (_req: Request, res: Response) => {
 // Re-authenticate
 app.post('/re-auth', async (req: Request, res: Response) => {
   try {
-    const validated = validateBody(ShowBrowserSchema, req.body, res, 'POST /re-auth');
-    if (!validated) return;
+    const { show_browser } = req.body;
 
     const result = await toolHandlers.handleReAuth(
-      validated,
+      { show_browser },
       async (message, progress, total) => {
         log.info(`Progress: ${message} (${progress}/${total})`);
       }
@@ -234,10 +132,8 @@ app.post('/re-auth', async (req: Request, res: Response) => {
 // Cleanup data
 app.post('/cleanup-data', async (req: Request, res: Response) => {
   try {
-    const validated = validateBody(CleanupDataSchema, req.body, res, 'POST /cleanup-data');
-    if (!validated) return;
-
-    const result = await toolHandlers.handleCleanupData(validated);
+    const { confirm, preserve_library } = req.body;
+    const result = await toolHandlers.handleCleanupData({ confirm, preserve_library });
     res.json(result);
   } catch (error) {
     res.status(500).json({
@@ -263,36 +159,19 @@ app.get('/notebooks', async (_req: Request, res: Response) => {
 // Add notebook
 app.post('/notebooks', async (req: Request, res: Response) => {
   try {
-    const validated = validateBody(AddNotebookSchema, req.body, res, 'POST /notebooks');
-    if (!validated) return;
+    const { url, name, description, topics, content_types, use_cases, tags } = req.body;
 
-    const result = await toolHandlers.handleAddNotebook(validated);
-    res.json(result);
-  } catch (error) {
-    res.status(500).json({
-      success: false,
-      error: error instanceof Error ? error.message : String(error)
-    });
-  }
-});
-
-// IMPORTANT: Static routes MUST come BEFORE parameterized routes!
-// Otherwise /notebooks/search would match as /notebooks/:id with id="search"
-
-// Search notebooks
-app.get('/notebooks/search', async (req: Request, res: Response) => {
-  try {
-    const { query } = req.query;
-    if (!query || typeof query !== 'string') {
-      log.warning('[HTTP] Bad request GET /notebooks/search: Missing query parameter');
+    if (!url || !name || !description || !topics) {
       return res.status(400).json({
         success: false,
-        error: 'Missing required query parameter: query'
+        error: 'Missing required fields: url, name, description, topics'
       });
     }
-    const result = await toolHandlers.handleSearchNotebooks({
-      query: query
+
+    const result = await toolHandlers.handleAddNotebook({
+      url, name, description, topics, content_types, use_cases, tags
     });
+
     res.json(result);
   } catch (error) {
     res.status(500).json({
@@ -302,20 +181,7 @@ app.get('/notebooks/search', async (req: Request, res: Response) => {
   }
 });
 
-// Get library stats
-app.get('/notebooks/stats', async (_req: Request, res: Response) => {
-  try {
-    const result = await toolHandlers.handleGetLibraryStats();
-    res.json(result);
-  } catch (error) {
-    res.status(500).json({
-      success: false,
-      error: error instanceof Error ? error.message : String(error)
-    });
-  }
-});
-
-// Get notebook by ID (MUST come AFTER static routes like /search and /stats)
+// Get notebook
 app.get('/notebooks/:id', async (req: Request, res: Response) => {
   try {
     const result = await toolHandlers.handleGetNotebook({ id: req.params.id });
@@ -331,12 +197,9 @@ app.get('/notebooks/:id', async (req: Request, res: Response) => {
 // Update notebook
 app.put('/notebooks/:id', async (req: Request, res: Response) => {
   try {
-    const validated = validateBody(UpdateNotebookSchema, req.body, res, 'PUT /notebooks/:id');
-    if (!validated) return;
-
     const result = await toolHandlers.handleUpdateNotebook({
       id: req.params.id,
-      ...validated
+      ...req.body
     });
     res.json(result);
   } catch (error) {
@@ -360,18 +223,62 @@ app.delete('/notebooks/:id', async (req: Request, res: Response) => {
   }
 });
 
+// Search notebooks
+app.get('/notebooks/search', async (req: Request, res: Response) => {
+  try {
+    const { query } = req.query;
+    const result = await toolHandlers.handleSearchNotebooks({
+      query: query as string
+    });
+    res.json(result);
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      error: error instanceof Error ? error.message : String(error)
+    });
+  }
+});
+
+// Get library stats
+app.get('/notebooks/stats', async (_req: Request, res: Response) => {
+  try {
+    const result = await toolHandlers.handleGetLibraryStats();
+    res.json(result);
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      error: error instanceof Error ? error.message : String(error)
+    });
+  }
+});
+
 // Auto-discover notebook metadata
 app.post('/notebooks/auto-discover', async (req: Request, res: Response) => {
   try {
-    const validated = validateBody(AutoDiscoverSchema, req.body, res, 'POST /notebooks/auto-discover');
-    if (!validated) return;
+    const { url } = req.body;
+
+    // Validate URL is provided
+    if (!url) {
+      return res.status(400).json({
+        success: false,
+        error: 'Missing required field: url'
+      });
+    }
+
+    // Validate it's a NotebookLM URL
+    if (!url.includes('notebooklm.google.com')) {
+      return res.status(400).json({
+        success: false,
+        error: 'Invalid URL: must be a NotebookLM URL (notebooklm.google.com)'
+      });
+    }
 
     // Create AutoDiscovery instance and discover metadata
     const autoDiscovery = new AutoDiscovery(sessionManager);
 
     let metadata;
     try {
-      metadata = await autoDiscovery.discoverMetadata(validated.url);
+      metadata = await autoDiscovery.discoverMetadata(url);
     } catch (error) {
       return res.status(500).json({
         success: false,
@@ -384,7 +291,7 @@ app.post('/notebooks/auto-discover', async (req: Request, res: Response) => {
     // - Add default content_types
     // - Add default use_cases based on first few tags
     const notebookInput = {
-      url: validated.url,
+      url,
       name: metadata.name,
       description: metadata.description,
       topics: metadata.tags, // tags → topics
@@ -474,7 +381,7 @@ const PORT = Number(process.env.HTTP_PORT) || 3000;
 const HOST = process.env.HTTP_HOST || '0.0.0.0';
 
 app.listen(PORT, HOST, () => {
-  log.success(`🌐 NotebookLM MCP HTTP Server v1.3.3`);
+  log.success(`🌐 NotebookLM MCP HTTP Server v1.3.2`);
   log.success(`   Listening on ${HOST}:${PORT}`);
   log.info('');
   log.info('📊 Quick Links:');

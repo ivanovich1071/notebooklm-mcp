@@ -133,40 +133,24 @@ const DEFAULTS: Config = {
 };
 
 
-// Simple console warning for config issues (logger may not be loaded yet)
-function configWarning(message: string): void {
-  console.error(`[CONFIG WARNING] ${message}`);
-}
-
 /**
  * Parse boolean from string (for env vars)
- * Logs warning if value is provided but not a valid boolean
  */
-function parseBoolean(value: string | undefined, defaultValue: boolean, envName?: string): boolean {
+function parseBoolean(value: string | undefined, defaultValue: boolean): boolean {
   if (value === undefined) return defaultValue;
   const lower = value.toLowerCase();
-  if (lower === "true" || lower === "1" || lower === "yes" || lower === "on") return true;
-  if (lower === "false" || lower === "0" || lower === "no" || lower === "off") return false;
-  if (envName) {
-    configWarning(`Invalid boolean value for ${envName}="${value}", using default: ${defaultValue}`);
-  }
+  if (lower === "true" || lower === "1") return true;
+  if (lower === "false" || lower === "0") return false;
   return defaultValue;
 }
 
 /**
  * Parse integer from string (for env vars)
- * Logs warning if value is provided but not a valid integer
  */
-function parseInteger(value: string | undefined, defaultValue: number, envName?: string): number {
+function parseInteger(value: string | undefined, defaultValue: number): number {
   if (value === undefined) return defaultValue;
   const parsed = Number.parseInt(value, 10);
-  if (Number.isNaN(parsed)) {
-    if (envName) {
-      configWarning(`Invalid integer value for ${envName}="${value}", using default: ${defaultValue}`);
-    }
-    return defaultValue;
-  }
-  return parsed;
+  return Number.isNaN(parsed) ? defaultValue : parsed;
 }
 
 /**
@@ -178,98 +162,39 @@ function parseArray(value: string | undefined, defaultValue: string[]): string[]
 }
 
 /**
- * Parse profile strategy with validation
- */
-function parseProfileStrategy(
-  value: string | undefined,
-  defaultValue: "auto" | "single" | "isolated"
-): "auto" | "single" | "isolated" {
-  if (value === undefined) return defaultValue;
-  const lower = value.toLowerCase();
-  if (lower === "auto" || lower === "single" || lower === "isolated") {
-    return lower as "auto" | "single" | "isolated";
-  }
-  configWarning(`Invalid NOTEBOOK_PROFILE_STRATEGY="${value}", must be "auto", "single", or "isolated". Using default: ${defaultValue}`);
-  return defaultValue;
-}
-
-/**
- * Validate configuration constraints and log warnings for invalid values
- */
-function validateConfig(config: Config): Config {
-  const validated = { ...config };
-
-  // Validate typing WPM range
-  if (validated.typingWpmMin > validated.typingWpmMax) {
-    configWarning(`typingWpmMin (${validated.typingWpmMin}) > typingWpmMax (${validated.typingWpmMax}), swapping values`);
-    [validated.typingWpmMin, validated.typingWpmMax] = [validated.typingWpmMax, validated.typingWpmMin];
-  }
-
-  // Validate delay range
-  if (validated.minDelayMs > validated.maxDelayMs) {
-    configWarning(`minDelayMs (${validated.minDelayMs}) > maxDelayMs (${validated.maxDelayMs}), swapping values`);
-    [validated.minDelayMs, validated.maxDelayMs] = [validated.maxDelayMs, validated.minDelayMs];
-  }
-
-  // Validate positive values
-  if (validated.browserTimeout <= 0) {
-    configWarning(`browserTimeout must be positive, using default: 30000`);
-    validated.browserTimeout = 30000;
-  }
-
-  if (validated.sessionTimeout <= 0) {
-    configWarning(`sessionTimeout must be positive, using default: 900`);
-    validated.sessionTimeout = 900;
-  }
-
-  if (validated.maxSessions <= 0) {
-    configWarning(`maxSessions must be positive, using default: 10`);
-    validated.maxSessions = 10;
-  }
-
-  if (validated.viewport.width <= 0 || validated.viewport.height <= 0) {
-    configWarning(`viewport dimensions must be positive, using default: 1024x768`);
-    validated.viewport = { width: 1024, height: 768 };
-  }
-
-  return validated;
-}
-
-/**
  * Apply environment variable overrides (legacy support)
- * Now with proper validation and warnings for invalid values
  */
 function applyEnvOverrides(config: Config): Config {
   return {
     ...config,
-    // Override with env vars if present (with validation)
+    // Override with env vars if present
     notebookUrl: process.env.NOTEBOOK_URL || config.notebookUrl,
-    headless: parseBoolean(process.env.HEADLESS, config.headless, "HEADLESS"),
-    browserTimeout: parseInteger(process.env.BROWSER_TIMEOUT, config.browserTimeout, "BROWSER_TIMEOUT"),
-    maxSessions: parseInteger(process.env.MAX_SESSIONS, config.maxSessions, "MAX_SESSIONS"),
-    sessionTimeout: parseInteger(process.env.SESSION_TIMEOUT, config.sessionTimeout, "SESSION_TIMEOUT"),
-    autoLoginEnabled: parseBoolean(process.env.AUTO_LOGIN_ENABLED, config.autoLoginEnabled, "AUTO_LOGIN_ENABLED"),
+    headless: parseBoolean(process.env.HEADLESS, config.headless),
+    browserTimeout: parseInteger(process.env.BROWSER_TIMEOUT, config.browserTimeout),
+    maxSessions: parseInteger(process.env.MAX_SESSIONS, config.maxSessions),
+    sessionTimeout: parseInteger(process.env.SESSION_TIMEOUT, config.sessionTimeout),
+    autoLoginEnabled: parseBoolean(process.env.AUTO_LOGIN_ENABLED, config.autoLoginEnabled),
     loginEmail: process.env.LOGIN_EMAIL || config.loginEmail,
     loginPassword: process.env.LOGIN_PASSWORD || config.loginPassword,
-    autoLoginTimeoutMs: parseInteger(process.env.AUTO_LOGIN_TIMEOUT_MS, config.autoLoginTimeoutMs, "AUTO_LOGIN_TIMEOUT_MS"),
-    stealthEnabled: parseBoolean(process.env.STEALTH_ENABLED, config.stealthEnabled, "STEALTH_ENABLED"),
-    stealthRandomDelays: parseBoolean(process.env.STEALTH_RANDOM_DELAYS, config.stealthRandomDelays, "STEALTH_RANDOM_DELAYS"),
-    stealthHumanTyping: parseBoolean(process.env.STEALTH_HUMAN_TYPING, config.stealthHumanTyping, "STEALTH_HUMAN_TYPING"),
-    stealthMouseMovements: parseBoolean(process.env.STEALTH_MOUSE_MOVEMENTS, config.stealthMouseMovements, "STEALTH_MOUSE_MOVEMENTS"),
-    typingWpmMin: parseInteger(process.env.TYPING_WPM_MIN, config.typingWpmMin, "TYPING_WPM_MIN"),
-    typingWpmMax: parseInteger(process.env.TYPING_WPM_MAX, config.typingWpmMax, "TYPING_WPM_MAX"),
-    minDelayMs: parseInteger(process.env.MIN_DELAY_MS, config.minDelayMs, "MIN_DELAY_MS"),
-    maxDelayMs: parseInteger(process.env.MAX_DELAY_MS, config.maxDelayMs, "MAX_DELAY_MS"),
+    autoLoginTimeoutMs: parseInteger(process.env.AUTO_LOGIN_TIMEOUT_MS, config.autoLoginTimeoutMs),
+    stealthEnabled: parseBoolean(process.env.STEALTH_ENABLED, config.stealthEnabled),
+    stealthRandomDelays: parseBoolean(process.env.STEALTH_RANDOM_DELAYS, config.stealthRandomDelays),
+    stealthHumanTyping: parseBoolean(process.env.STEALTH_HUMAN_TYPING, config.stealthHumanTyping),
+    stealthMouseMovements: parseBoolean(process.env.STEALTH_MOUSE_MOVEMENTS, config.stealthMouseMovements),
+    typingWpmMin: parseInteger(process.env.TYPING_WPM_MIN, config.typingWpmMin),
+    typingWpmMax: parseInteger(process.env.TYPING_WPM_MAX, config.typingWpmMax),
+    minDelayMs: parseInteger(process.env.MIN_DELAY_MS, config.minDelayMs),
+    maxDelayMs: parseInteger(process.env.MAX_DELAY_MS, config.maxDelayMs),
     notebookDescription: process.env.NOTEBOOK_DESCRIPTION || config.notebookDescription,
     notebookTopics: parseArray(process.env.NOTEBOOK_TOPICS, config.notebookTopics),
     notebookContentTypes: parseArray(process.env.NOTEBOOK_CONTENT_TYPES, config.notebookContentTypes),
     notebookUseCases: parseArray(process.env.NOTEBOOK_USE_CASES, config.notebookUseCases),
-    profileStrategy: parseProfileStrategy(process.env.NOTEBOOK_PROFILE_STRATEGY, config.profileStrategy),
-    cloneProfileOnIsolated: parseBoolean(process.env.NOTEBOOK_CLONE_PROFILE, config.cloneProfileOnIsolated, "NOTEBOOK_CLONE_PROFILE"),
-    cleanupInstancesOnStartup: parseBoolean(process.env.NOTEBOOK_CLEANUP_ON_STARTUP, config.cleanupInstancesOnStartup, "NOTEBOOK_CLEANUP_ON_STARTUP"),
-    cleanupInstancesOnShutdown: parseBoolean(process.env.NOTEBOOK_CLEANUP_ON_SHUTDOWN, config.cleanupInstancesOnShutdown, "NOTEBOOK_CLEANUP_ON_SHUTDOWN"),
-    instanceProfileTtlHours: parseInteger(process.env.NOTEBOOK_INSTANCE_TTL_HOURS, config.instanceProfileTtlHours, "NOTEBOOK_INSTANCE_TTL_HOURS"),
-    instanceProfileMaxCount: parseInteger(process.env.NOTEBOOK_INSTANCE_MAX_COUNT, config.instanceProfileMaxCount, "NOTEBOOK_INSTANCE_MAX_COUNT"),
+    profileStrategy: (process.env.NOTEBOOK_PROFILE_STRATEGY as any) || config.profileStrategy,
+    cloneProfileOnIsolated: parseBoolean(process.env.NOTEBOOK_CLONE_PROFILE, config.cloneProfileOnIsolated),
+    cleanupInstancesOnStartup: parseBoolean(process.env.NOTEBOOK_CLEANUP_ON_STARTUP, config.cleanupInstancesOnStartup),
+    cleanupInstancesOnShutdown: parseBoolean(process.env.NOTEBOOK_CLEANUP_ON_SHUTDOWN, config.cleanupInstancesOnShutdown),
+    instanceProfileTtlHours: parseInteger(process.env.NOTEBOOK_INSTANCE_TTL_HOURS, config.instanceProfileTtlHours),
+    instanceProfileMaxCount: parseInteger(process.env.NOTEBOOK_INSTANCE_MAX_COUNT, config.instanceProfileMaxCount),
   };
 }
 
@@ -277,15 +202,9 @@ function applyEnvOverrides(config: Config): Config {
  * Build final configuration
  * Priority: Defaults → Environment Variables → Tool Parameters (at runtime)
  * No config.json files - everything via ENV or tool parameters!
- *
- * Includes validation to ensure all constraints are satisfied:
- * - min <= max for ranges
- * - positive values where required
- * - valid enum values for profileStrategy
  */
 function buildConfig(): Config {
-  const withEnv = applyEnvOverrides(DEFAULTS);
-  return validateConfig(withEnv);
+  return applyEnvOverrides(DEFAULTS);
 }
 
 /**

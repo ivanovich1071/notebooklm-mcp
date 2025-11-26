@@ -110,8 +110,7 @@ export async function snapshotAllResponses(page: Page): Promise<string[]> {
               allTexts.push(text.trim());
             }
           }
-        } catch (error) {
-          log.debug(`[SNAPSHOT] Failed to extract text from container: ${error}`);
+        } catch {
           continue;
         }
       }
@@ -141,8 +140,7 @@ export async function countResponseElements(page: Page): Promise<number> {
             if (isVisible) {
               count++;
             }
-          } catch (error) {
-            log.debug(`[COUNT] Visibility check failed: ${error}`);
+          } catch {
             continue;
           }
         }
@@ -151,8 +149,7 @@ export async function countResponseElements(page: Page): Promise<number> {
           break;
         }
       }
-    } catch (error) {
-      log.debug(`[COUNT] Selector ${selector} failed: ${error}`);
+    } catch {
       continue;
     }
   }
@@ -358,8 +355,7 @@ async function extractLatestText(
               empty++;
             }
           }
-        } catch (error) {
-          log.debug(`[EXTRACT] Failed to process container[${idx}]: ${error}`);
+        } catch {
           continue;
         }
       }
@@ -405,8 +401,7 @@ async function extractLatestText(
             if (closest) {
               container = closest.asElement() || element;
             }
-          } catch (error) {
-            log.debug(`[EXTRACT] Closest container lookup failed: ${error}`);
+          } catch {
             container = element;
           }
 
@@ -414,13 +409,11 @@ async function extractLatestText(
           if (text && text.trim() && !knownHashes.has(hashString(text.trim()))) {
             return text.trim();
           }
-        } catch (error) {
-          log.debug(`[EXTRACT] Failed to get text from element: ${error}`);
+        } catch {
           continue;
         }
       }
-    } catch (error) {
-      log.debug(`[EXTRACT] Fallback selector failed: ${error}`);
+    } catch {
       continue;
     }
   }
@@ -483,8 +476,8 @@ async function extractLatestText(
     if (typeof fallbackText === "string" && fallbackText.trim()) {
       return fallbackText.trim();
     }
-  } catch (error) {
-    log.debug(`[EXTRACT] JavaScript evaluation fallback failed: ${error}`);
+  } catch {
+    // Ignore evaluation errors
   }
 
   return null;

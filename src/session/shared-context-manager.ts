@@ -198,8 +198,8 @@ export class SharedContextManager {
         this.currentProfileDir = baseProfile;
         this.isIsolatedProfile = false;
       }
-    } catch (e: any) {
-      const msg = String(e?.message || e);
+    } catch (e: unknown) {
+      const msg = String(e instanceof Error ? e.message : e);
       const isSingleton = /ProcessSingleton|SingletonLock|profile is already in use/i.test(msg);
       if (strategy === "single" || !isSingleton) {
         // hard fail
@@ -466,7 +466,7 @@ export class SharedContextManager {
     if (!this.globalContext) {
       return "none";
     }
-    // Use object hash as ID
-    return `ctx-${(this.globalContext as any)._guid || "unknown"}`;
+    // Use internal Playwright _guid as ID (internal property, not typed)
+    return `ctx-${(this.globalContext as unknown as { _guid?: string })._guid || "unknown"}`;
   }
 }

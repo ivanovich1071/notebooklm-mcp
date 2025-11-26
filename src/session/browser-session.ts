@@ -74,8 +74,8 @@ export class BrowserSession {
       // Create new page (tab) in the shared context (with auto-recovery)
       try {
         this.page = await this.context.newPage();
-      } catch (e: any) {
-        const msg = String(e?.message || e);
+      } catch (e: unknown) {
+        const msg = String(e instanceof Error ? e.message : e);
         if (/has been closed|Target .* closed|Browser has been closed|Context .* closed/i.test(msg)) {
           log.warning("  ♻️  Context was closed. Recreating and retrying newPage...");
           this.context = await this.sharedContextManager.getOrCreateContext();
@@ -196,7 +196,7 @@ export class BrowserSession {
 
   private isPageClosedSafe(): boolean {
     if (!this.page) return true;
-    const p: any = this.page as any;
+    const p = this.page as { isClosed?: () => boolean };
     try {
       if (typeof p.isClosed === 'function') {
         if (p.isClosed()) return true;
@@ -449,8 +449,8 @@ export class BrowserSession {
 
     try {
       return await askOnce();
-    } catch (error: any) {
-      const msg = String(error?.message || error);
+    } catch (error: unknown) {
+      const msg = String(error instanceof Error ? error.message : error);
       if (/has been closed|Target .* closed|Browser has been closed|Context .* closed/i.test(msg)) {
         log.warning(`  ♻️  Detected closed page/context. Recovering session and retrying ask...`);
         try {
@@ -575,8 +575,8 @@ export class BrowserSession {
       const inputSelector = "textarea.query-box-input";
       const input = await this.page.$(inputSelector);
       if (input) {
-        const isDisabled = await input.evaluate((el: any) => {
-          return el.disabled || el.hasAttribute("disabled");
+        const isDisabled = await input.evaluate((el) => {
+          return (el as { disabled?: boolean }).disabled || el.hasAttribute("disabled");
         });
 
         if (isDisabled) {
@@ -629,8 +629,8 @@ export class BrowserSession {
 
     try {
       await resetOnce();
-    } catch (error: any) {
-      const msg = String(error?.message || error);
+    } catch (error: unknown) {
+      const msg = String(error instanceof Error ? error.message : error);
       if (/has been closed|Target .* closed|Browser has been closed|Context .* closed/i.test(msg)) {
         log.warning(`  ♻️  Detected closed page/context during reset. Recovering and retrying...`);
         this.initialized = false;

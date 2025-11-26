@@ -12,7 +12,7 @@
  * Based on the Python implementation from auth.py
  */
 
-import type { BrowserContext, Page } from "patchright";
+import type { BrowserContext, Page, ElementHandle } from "patchright";
 import fs from "fs/promises";
 import { existsSync } from "fs";
 import path from "path";
@@ -327,8 +327,26 @@ export class AuthManager {
             log.success("✅ Login successful! NotebookLM URL detected.");
             log.success(`✅ Current URL: ${currentUrl}`);
 
-            // Short wait to ensure page is loaded
-            await page.waitForTimeout(2000);
+            // ✅ CRITICAL: Wait for page to fully load before saving cookies
+            // NotebookLM needs time to:
+            // 1. Complete the OAuth redirect
+            // 2. Generate session cookies (__Secure-OSID, etc.)
+            // 3. Load the application and establish session
+            log.info("⏳ Waiting for NotebookLM to fully load (10 seconds)...");
+            await sendProgress?.("Waiting for page to fully load...", 9, 10);
+
+            // Wait for network to be idle (no more requests for 500ms)
+            try {
+              await page.waitForLoadState("networkidle", { timeout: 15000 });
+              log.success("✅ Page network is idle");
+            } catch {
+              log.warning("⚠️  Network idle timeout - continuing anyway");
+            }
+
+            // Additional buffer to ensure all cookies are set
+            await page.waitForTimeout(5000);
+            log.success("✅ Page fully loaded, cookies should be set");
+
             return true;
           }
 
@@ -338,8 +356,7 @@ export class AuthManager {
           }
 
           await page.waitForTimeout(checkIntervalMs);
-        } catch (error) {
-          log.debug(`[LOGIN] Poll iteration error (non-critical): ${error}`);
+        } catch {
           await page.waitForTimeout(checkIntervalMs);
           continue;
         }
@@ -536,8 +553,8 @@ export class AuthManager {
           await page.waitForTimeout(2000);
           return true;
         }
-      } catch (error) {
-        log.debug(`[REDIRECT] URL check error (non-critical): ${error}`);
+      } catch {
+        // Ignore errors
       }
 
       await page.waitForTimeout(500);
@@ -565,8 +582,8 @@ export class AuthManager {
           log.success("  ✅ NotebookLM URL detected");
           return true;
         }
-      } catch (error) {
-        log.debug(`[NOTEBOOK] URL check error (non-critical): ${error}`);
+      } catch {
+        // Ignore errors
       }
 
       await page.waitForTimeout(1000);
@@ -604,8 +621,7 @@ export class AuthManager {
       }
 
       return false;
-    } catch (error) {
-      log.debug(`[ACCOUNT_CHOOSER] Error handling account chooser: ${error}`);
+    } catch {
       return false;
     }
   }
@@ -623,7 +639,7 @@ export class AuthManager {
     ];
 
     let emailSelector: string | null = null;
-    let emailField: any = null;
+    let emailField: ElementHandle | null = null;
 
     for (const selector of emailSelectors) {
       try {
@@ -637,8 +653,7 @@ export class AuthManager {
           if (!(await candidate.isVisible())) {
             continue; // Hidden field
           }
-        } catch (error) {
-          log.debug(`[EMAIL] Visibility check failed for ${selector}: ${error}`);
+        } catch {
           continue;
         }
 
@@ -646,8 +661,7 @@ export class AuthManager {
         emailSelector = selector;
         log.success(`    ✅ Email field visible: ${selector}`);
         break;
-      } catch (error) {
-        log.debug(`[EMAIL] Selector ${selector} not found: ${error}`);
+      } catch {
         continue;
       }
     }
@@ -667,8 +681,8 @@ export class AuthManager {
         await randomMouseMovement(page, targetX, targetY);
         await randomDelay(200, 500);
       }
-    } catch (error) {
-      log.debug(`[EMAIL] Mouse movement failed (non-critical): ${error}`);
+    } catch {
+      // Ignore errors
     }
 
     // Click to focus
@@ -678,8 +692,8 @@ export class AuthManager {
       log.warning(`    ⚠️  Could not click email field (${error}); trying direct focus`);
       try {
         await emailField.focus();
-      } catch (focusError) {
-        log.error(`    ❌ Failed to focus email field: ${focusError}`);
+      } catch {
+        log.error("    ❌ Failed to focus email field");
         return false;
       }
     }
@@ -695,8 +709,7 @@ export class AuthManager {
       try {
         await page.fill(emailSelector, email);
         log.success("    ✅ Filled email using fallback");
-      } catch (fillError) {
-        log.error(`    ❌ Fallback fill also failed: ${fillError}`);
+      } catch {
         return false;
       }
     }
@@ -723,8 +736,7 @@ export class AuthManager {
           nextClicked = true;
           break;
         }
-      } catch (error) {
-        log.debug(`[EMAIL] Next button selector ${selector} failed: ${error}`);
+      } catch {
         continue;
       }
     }
@@ -749,7 +761,7 @@ export class AuthManager {
     const passwordSelectors = ["input[name='Passwd']", "input[type='password']"];
 
     let passwordSelector: string | null = null;
-    let passwordField: any = null;
+    let passwordField: ElementHandle | null = null;
 
     for (const selector of passwordSelectors) {
       try {
@@ -759,8 +771,7 @@ export class AuthManager {
           log.success(`    ✅ Password field found: ${selector}`);
           break;
         }
-      } catch (error) {
-        log.debug(`[PASSWORD] Selector ${selector} not found: ${error}`);
+      } catch {
         continue;
       }
     }
@@ -779,8 +790,8 @@ export class AuthManager {
         await randomMouseMovement(page, targetX, targetY);
         await randomDelay(300, 700);
       }
-    } catch (error) {
-      log.debug(`[PASSWORD] Mouse movement failed (non-critical): ${error}`);
+    } catch {
+      // Ignore errors
     }
 
     // Click to focus
@@ -823,8 +834,7 @@ export class AuthManager {
           pwdNextClicked = true;
           break;
         }
-      } catch (error) {
-        log.debug(`[PASSWORD] Next button selector ${selector} failed: ${error}`);
+      } catch {
         continue;
       }
     }
@@ -853,8 +863,7 @@ export class AuthManager {
           await randomDelay(120, 260);
           return true;
         }
-      } catch (error) {
-        log.debug(`[CLICK_TEXT] Text "${text}" not found or click failed: ${error}`);
+      } catch {
         continue;
       }
     }
@@ -1060,16 +1069,14 @@ export class AuthManager {
     try {
       try {
         await fs.unlink(this.stateFilePath);
-        log.debug(`[CLEAR_STATE] Deleted state file: ${this.stateFilePath}`);
-      } catch (error) {
-        log.debug(`[CLEAR_STATE] State file not found (expected): ${error}`);
+      } catch {
+        // File doesn't exist
       }
 
       try {
         await fs.unlink(this.sessionFilePath);
-        log.debug(`[CLEAR_STATE] Deleted session file: ${this.sessionFilePath}`);
-      } catch (error) {
-        log.debug(`[CLEAR_STATE] Session file not found (expected): ${error}`);
+      } catch {
+        // File doesn't exist
       }
 
       log.success("✅ Authentication state cleared");
@@ -1094,8 +1101,8 @@ export class AuthManager {
         await fs.unlink(this.stateFilePath);
         log.info(`  🗑️  Deleted: ${this.stateFilePath}`);
         deletedCount++;
-      } catch (error) {
-        log.debug(`[HARD_RESET] State file not found (expected): ${error}`);
+      } catch {
+        // File doesn't exist
       }
 
       // Delete session file
@@ -1103,8 +1110,8 @@ export class AuthManager {
         await fs.unlink(this.sessionFilePath);
         log.info(`  🗑️  Deleted: ${this.sessionFilePath}`);
         deletedCount++;
-      } catch (error) {
-        log.debug(`[HARD_RESET] Session file not found (expected): ${error}`);
+      } catch {
+        // File doesn't exist
       }
 
       // Delete entire browser_state_dir
@@ -1115,8 +1122,8 @@ export class AuthManager {
           deletedCount++;
         }
         log.info(`  🗑️  Deleted: ${CONFIG.browserStateDir}/ (${files.length} files)`);
-      } catch (error) {
-        log.debug(`[HARD_RESET] Browser state dir empty or not found: ${error}`);
+      } catch {
+        // Directory doesn't exist or empty
       }
 
       if (deletedCount === 0) {

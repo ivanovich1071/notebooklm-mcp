@@ -7,20 +7,21 @@
     "notebooklm-mcp": "dist/index.js"
   },
   "scripts": {
-    "build": "tsc",
-    "watch": "tsc --watch",
-    "dev": "tsx watch src/index.ts",
-    "dev:http": "tsx watch src/http-wrapper.ts",
+    "help": "node dist/cli/help.js",
+    "setup-auth": "node dist/cli/setup-auth.js",
+    "de-auth": "node dist/cli/de-auth.js",
     "start:http": "node dist/http-wrapper.js",
+    "dev:http": "tsx watch src/http-wrapper.ts",
     "daemon:start": "pm2 start ecosystem.config.cjs",
     "daemon:stop": "pm2 stop notebooklm-mcp",
     "daemon:restart": "pm2 restart notebooklm-mcp",
     "daemon:logs": "pm2 logs notebooklm-mcp",
     "daemon:status": "pm2 status",
     "daemon:delete": "pm2 delete notebooklm-mcp",
-    "setup-auth": "node dist/index.js",
-    "prepare": "npm run build",
-    "test": "tsx src/index.ts"
+    "build": "tsc",
+    "watch": "tsc --watch",
+    "dev": "tsx watch src/index.ts",
+    "prepare": "npm run build"
   },
   "keywords": [
     "mcp",

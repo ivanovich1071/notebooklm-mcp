@@ -15,7 +15,7 @@
 import { SessionManager } from "../session/session-manager.js";
 import { AuthManager } from "../auth/auth-manager.js";
 import { NotebookLibrary } from "../library/notebook-library.js";
-import type { AddNotebookInput, UpdateNotebookInput } from "../library/types.js";
+import type { AddNotebookInput, UpdateNotebookInput, NotebookEntry, LibraryStats } from "../library/types.js";
 import { CONFIG, applyBrowserOptions, type BrowserOptions } from "../config.js";
 import { log } from "../utils/logger.js";
 import type {
@@ -1416,7 +1416,7 @@ export class ToolHandlers {
   /**
    * Handle auto_discover_notebook tool
    */
-  async handleAutoDiscoverNotebook(args: { url: string }): Promise<ToolResult<{ notebook: any }>> {
+  async handleAutoDiscoverNotebook(args: { url: string }): Promise<ToolResult<{ notebook: NotebookEntry }>> {
     log.info(`🔧 [TOOL] auto_discover_notebook called`);
     log.info(`  URL: ${args.url}`);
 
@@ -1466,7 +1466,7 @@ export class ToolHandlers {
   /**
    * Handle add_notebook tool
    */
-  async handleAddNotebook(args: AddNotebookInput): Promise<ToolResult<{ notebook: any }>> {
+  async handleAddNotebook(args: AddNotebookInput): Promise<ToolResult<{ notebook: NotebookEntry }>> {
     log.info(`🔧 [TOOL] add_notebook called`);
     log.info(`  Name: ${args.name}`);
 
@@ -1490,7 +1490,7 @@ export class ToolHandlers {
   /**
    * Handle list_notebooks tool
    */
-  async handleListNotebooks(): Promise<ToolResult<{ notebooks: any[]; active_notebook_id: string | null }>> {
+  async handleListNotebooks(): Promise<ToolResult<{ notebooks: NotebookEntry[]; active_notebook_id: string | null }>> {
     log.info(`🔧 [TOOL] list_notebooks called`);
 
     try {
@@ -1519,7 +1519,7 @@ export class ToolHandlers {
   /**
    * Handle get_notebook tool
    */
-  async handleGetNotebook(args: { id: string }): Promise<ToolResult<{ notebook: any }>> {
+  async handleGetNotebook(args: { id: string }): Promise<ToolResult<{ notebook: NotebookEntry }>> {
     log.info(`🔧 [TOOL] get_notebook called`);
     log.info(`  ID: ${args.id}`);
 
@@ -1551,7 +1551,7 @@ export class ToolHandlers {
   /**
    * Handle select_notebook tool
    */
-  async handleSelectNotebook(args: { id: string }): Promise<ToolResult<{ notebook: any }>> {
+  async handleSelectNotebook(args: { id: string }): Promise<ToolResult<{ notebook: NotebookEntry }>> {
     log.info(`🔧 [TOOL] select_notebook called`);
     log.info(`  ID: ${args.id}`);
 
@@ -1575,7 +1575,7 @@ export class ToolHandlers {
   /**
    * Handle update_notebook tool
    */
-  async handleUpdateNotebook(args: UpdateNotebookInput): Promise<ToolResult<{ notebook: any }>> {
+  async handleUpdateNotebook(args: UpdateNotebookInput): Promise<ToolResult<{ notebook: NotebookEntry }>> {
     log.info(`🔧 [TOOL] update_notebook called`);
     log.info(`  ID: ${args.id}`);
 
@@ -1643,7 +1643,7 @@ export class ToolHandlers {
   /**
    * Handle search_notebooks tool
    */
-  async handleSearchNotebooks(args: { query: string }): Promise<ToolResult<{ notebooks: any[] }>> {
+  async handleSearchNotebooks(args: { query: string }): Promise<ToolResult<{ notebooks: NotebookEntry[] }>> {
     log.info(`🔧 [TOOL] search_notebooks called`);
     log.info(`  Query: "${args.query}"`);
 
@@ -1667,7 +1667,7 @@ export class ToolHandlers {
   /**
    * Handle get_library_stats tool
    */
-  async handleGetLibraryStats(): Promise<ToolResult<any>> {
+  async handleGetLibraryStats(): Promise<ToolResult<LibraryStats>> {
     log.info(`🔧 [TOOL] get_library_stats called`);
 
     try {
@@ -1759,35 +1759,23 @@ export class ToolHandlers {
 
         if (result.success) {
           log.success(`✅ [TOOL] cleanup_data completed - deleted ${result.deletedPaths.length} items`);
-          return {
-            success: true as const,
-            data: {
-              status: "completed",
-              mode,
-              result: {
-                deletedPaths: result.deletedPaths,
-                failedPaths: result.failedPaths,
-                totalSizeBytes: result.totalSizeBytes,
-                categorySummary: result.categorySummary,
-              },
-            },
-          };
         } else {
           log.warning(`⚠️  [TOOL] cleanup_data completed with ${result.failedPaths.length} errors`);
-          return {
-            success: true as const,
-            data: {
-              status: "partial",
-              mode,
-              result: {
-                deletedPaths: result.deletedPaths,
-                failedPaths: result.failedPaths,
-                totalSizeBytes: result.totalSizeBytes,
-                categorySummary: result.categorySummary,
-              },
-            },
-          };
         }
+
+        return {
+          success: result.success,
+          data: {
+            status: result.success ? "completed" : "partial",
+            mode,
+            result: {
+              deletedPaths: result.deletedPaths,
+              failedPaths: result.failedPaths,
+              totalSizeBytes: result.totalSizeBytes,
+              categorySummary: result.categorySummary,
+            },
+          },
+        };
       }
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);

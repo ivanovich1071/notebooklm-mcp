@@ -40,6 +40,7 @@ import {
   ReadResourceRequestSchema,
   // CompleteRequestSchema, // Disabled for Claude Desktop compatibility
   Tool,
+  Resource,
 } from "@modelcontextprotocol/sdk/types.js";
 
 import { AuthManager } from "./auth/auth-manager.js";
@@ -65,7 +66,7 @@ class NotebookLMMCPServer {
     this.server = new Server(
       {
         name: "notebooklm-mcp",
-        version: "1.3.3",
+        version: "1.3.2",
       },
       {
         capabilities: {
@@ -94,7 +95,7 @@ class NotebookLMMCPServer {
     this.setupShutdownHandlers();
 
     log.info("🚀 NotebookLM MCP Server initialized");
-    log.info(`  Version: 1.3.3`);
+    log.info(`  Version: 1.3.2`);
     log.info(`  Node: ${process.version}`);
     log.info(`  Platform: ${process.platform}`);
   }
@@ -142,7 +143,7 @@ class NotebookLMMCPServer {
       log.info("📚 [MCP] list_resources request received");
 
       const notebooks = this.library.listNotebooks();
-      const resources: any[] = [
+      const resources: Resource[] = [
         {
           uri: "notebooklm://library",
           name: "Notebook Library",
@@ -344,20 +345,21 @@ class NotebookLMMCPServer {
     // Handle tool calls
     this.server.setRequestHandler(CallToolRequestSchema, async (request) => {
       const { name, arguments: args } = request.params;
-      const progressToken = (args as any)?._meta?.progressToken;
+      const progressToken = (args as Record<string, unknown> | undefined)?._meta as { progressToken?: string } | undefined;
+      const token = progressToken?.progressToken;
 
       log.info(`🔧 [MCP] Tool call: ${name}`);
-      if (progressToken) {
-        log.info(`  📊 Progress token: ${progressToken}`);
+      if (token) {
+        log.info(`  📊 Progress token: ${token}`);
       }
 
       // Create progress callback function
       const sendProgress = async (message: string, progress?: number, total?: number) => {
-        if (progressToken) {
+        if (token) {
           await this.server.notification({
             method: "notifications/progress",
             params: {
-              progressToken,
+              progressToken: token,
               message,
               ...(progress !== undefined && { progress }),
               ...(total !== undefined && { total }),
@@ -639,7 +641,7 @@ async function main() {
   // Print banner
   console.error("╔══════════════════════════════════════════════════════════╗");
   console.error("║                                                          ║");
-  console.error("║           NotebookLM MCP Server v1.3.3                   ║");
+  console.error("║           NotebookLM MCP Server v1.3.2                   ║");
   console.error("║                                                          ║");
   console.error("║   Chat with Gemini 2.5 through NotebookLM via MCP       ║");
   console.error("║                                                          ║");
