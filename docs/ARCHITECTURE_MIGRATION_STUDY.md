@@ -24,6 +24,7 @@ Cette étude analyse les options pour industrialiser l'authentification et migre
 6. [Matrice Avantages/Limites](#6-matrice-avantageslimites)
 7. [Recommandations](#7-recommandations)
 8. [Roadmap et Points de Réévaluation](#8-roadmap-et-points-de-réévaluation)
+9. [Industrialisation de l'Authentification](#9-industrialisation-de-lauthentification-sans-api-enterprise)
 
 ---
 
@@ -432,5 +433,462 @@ curl -X POST \
 
 ---
 
-_Document généré le 21 décembre 2024_
+## 9. Industrialisation de l'Authentification (sans API Enterprise)
+
+Cette section détaille les options pour robustifier l'authentification Playwright sans migrer vers l'API Enterprise.
+
+### 9.1 Problématique OAuth vs Session Cookies
+
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│  POURQUOI OAUTH NE RÉSOUT PAS LE PROBLÈME DIRECTEMENT                   │
+├─────────────────────────────────────────────────────────────────────────┤
+│                                                                         │
+│  NotebookLM Web UI utilise:                                             │
+│  └── Session cookies Google (SID, HSID, SSID, APISID, SAPISID)          │
+│      ├── Durée: ~2 semaines                                             │
+│      └── Générés lors du login web                                      │
+│                                                                         │
+│  OAuth 2.0 produit:                                                     │
+│  └── Access tokens + Refresh tokens                                     │
+│      ├── Pour APIs Google (Drive, Cloud, etc.)                          │
+│      └── NON convertibles en session cookies web ❌                     │
+│                                                                         │
+│  Résultat:                                                              │
+│  ├── OAuth fonctionne pour l'API Enterprise (si on l'utilisait)         │
+│  ├── OAuth NE fonctionne PAS pour l'UI web NotebookLM                   │
+│  └── On doit maintenir des sessions web via Playwright                  │
+│                                                                         │
+└─────────────────────────────────────────────────────────────────────────┘
+```
+
+### 9.2 Options d'Industrialisation
+
+#### Option 1: Comptes Dédiés + Credentials Stockés (Sans 2FA)
+
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│  OPTION 1: CREDENTIALS STOCKÉS (comptes sans 2FA)                       │
+├─────────────────────────────────────────────────────────────────────────┤
+│                                                                         │
+│  Setup:                                                                 │
+│  1. Créer 3-5 comptes Gmail DÉDIÉS (pas comptes personnels)             │
+│  2. Désactiver 2FA sur ces comptes                                      │
+│  3. Stocker email/password chiffrés (AES-256)                           │
+│  4. Auto-login automatique quand session expire                         │
+│                                                                         │
+│  Flow:                                                                  │
+│  ┌─────────┐     ┌──────────────┐     ┌─────────────────┐               │
+│  │ Request │────▶│ Check Session│────▶│ Session Valid?  │               │
+│  └─────────┘     └──────────────┘     └────────┬────────┘               │
+│                                                │                        │
+│                         ┌──────────────────────┴──────────────────┐     │
+│                         ▼                                         ▼     │
+│                  ┌──────────────┐                         ┌───────────┐ │
+│                  │ YES: Use it  │                         │ NO: Login │ │
+│                  └──────────────┘                         └─────┬─────┘ │
+│                                                                 │       │
+│                                                                 ▼       │
+│                                              ┌──────────────────────────┐│
+│                                              │ 1. Decrypt credentials   ││
+│                                              │ 2. Navigate to login     ││
+│                                              │ 3. Fill email, Next      ││
+│                                              │ 4. Fill password, Next   ││
+│                                              │ 5. Save session cookies  ││
+│                                              └──────────────────────────┘│
+│                                                                         │
+│  Avantages:                          Limites:                           │
+│  ✅ Zero intervention humaine        ⚠️ Comptes moins sécurisés (no 2FA)│
+│  ✅ Simple à implémenter             ⚠️ Google peut bloquer si suspect  │
+│  ✅ Fonctionne 24/7                  ⚠️ Credentials stockés = risque    │
+│                                                                         │
+└─────────────────────────────────────────────────────────────────────────┘
+```
+
+#### Option 2: Comptes avec TOTP + Auto-2FA
+
+````
+┌─────────────────────────────────────────────────────────────────────────┐
+│  OPTION 2: CREDENTIALS + TOTP SECRET (comptes avec 2FA)                 │
+├─────────────────────────────────────────────────────────────────────────┤
+│                                                                         │
+│  Setup:                                                                 │
+│  1. Créer comptes Gmail avec 2FA TOTP (PAS SMS)                         │
+│  2. Lors du setup 2FA, sauvegarder le SECRET (code QR)                  │
+│  3. Stocker email + password + TOTP secret (chiffrés)                   │
+│  4. Générer les codes 2FA programmatiquement                            │
+│                                                                         │
+│  Génération TOTP:                                                       │
+│  ```typescript                                                          │
+│  import { authenticator } from 'otplib';                                │
+│                                                                         │
+│  const secret = decrypt(account.totpSecretEncrypted);                   │
+│  const code = authenticator.generate(secret);                           │
+│  // → "123456" (code 2FA valide 30 secondes)                            │
+│  ```                                                                    │
+│                                                                         │
+│  Flow 2FA:                                                              │
+│  ┌─────────────────┐                                                    │
+│  │ After password  │                                                    │
+│  └────────┬────────┘                                                    │
+│           ▼                                                             │
+│  ┌─────────────────┐     ┌─────────────────┐     ┌─────────────────┐    │
+│  │ Detect 2FA page │────▶│ Generate TOTP   │────▶│ Fill & Submit   │    │
+│  └─────────────────┘     │ from secret     │     └─────────────────┘    │
+│                          └─────────────────┘                            │
+│                                                                         │
+│  Avantages:                          Limites:                           │
+│  ✅ 2FA activé (plus sécurisé)       ⚠️ TOTP secret à stocker           │
+│  ✅ Zero intervention humaine        ⚠️ Plus complexe à setup           │
+│  ✅ Meilleure protection compte      ⚠️ Google peut quand même bloquer  │
+│                                                                         │
+└─────────────────────────────────────────────────────────────────────────┘
+````
+
+#### Option 3: Session Keep-Alive Proactif
+
+````
+┌─────────────────────────────────────────────────────────────────────────┐
+│  OPTION 3: SESSION KEEP-ALIVE (prévention vs guérison)                  │
+├─────────────────────────────────────────────────────────────────────────┤
+│                                                                         │
+│  Principe: Utiliser la session AVANT qu'elle expire                     │
+│  Les cookies Google durent ~2 semaines mais se "refresh" à l'usage      │
+│                                                                         │
+│  Implementation:                                                        │
+│  ├── Cron job toutes les 12h                                            │
+│  ├── Pour chaque compte: charger NotebookLM (pas besoin de query)       │
+│  └── Ça "refresh" implicitement les cookies de session                  │
+│                                                                         │
+│  ```typescript                                                          │
+│  // Cron: 0 */12 * * * (toutes les 12 heures)                           │
+│  async function keepSessionsAlive() {                                   │
+│    for (const account of accounts) {                                    │
+│      const context = await loadBrowserProfile(account);                 │
+│      const page = await context.newPage();                              │
+│      await page.goto('https://notebooklm.google.com');                  │
+│      await page.waitForLoadState('networkidle');                        │
+│      // Session cookies auto-refreshed!                                 │
+│      await page.close();                                                │
+│    }                                                                    │
+│  }                                                                      │
+│  ```                                                                    │
+│                                                                         │
+│  Avantages:                          Limites:                           │
+│  ✅ Pas de login = moins de risque   ⚠️ Retarde le problème seulement   │
+│  ✅ Très simple                      ⚠️ Si rate un refresh = problème   │
+│  ✅ Pas de credentials stockés       ⚠️ Nécessite login initial manuel  │
+│                                                                         │
+└─────────────────────────────────────────────────────────────────────────┘
+````
+
+### 9.3 Architecture Multi-Comptes Recommandée
+
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│  ARCHITECTURE PRODUCTION RECOMMANDÉE                                    │
+├─────────────────────────────────────────────────────────────────────────┤
+│                                                                         │
+│  ~/.notebooklm-mcp/                                                     │
+│  ├── accounts.json              ← Configuration des comptes             │
+│  ├── accounts/                                                          │
+│  │   ├── account-1/                                                     │
+│  │   │   ├── profile/           ← Chrome profile complet persistant     │
+│  │   │   ├── auth-state.json    ← Cookies/session exportés              │
+│  │   │   ├── quota.json         ← { used: 45, limit: 50, resetAt: "." } │
+│  │   │   └── credentials.enc    ← Email/password/TOTP chiffré (opt.)    │
+│  │   ├── account-2/                                                     │
+│  │   │   └── ...                                                        │
+│  │   └── account-3/                                                     │
+│  │       └── ...                                                        │
+│  └── active-account.json        ← Compte actuellement sélectionné       │
+│                                                                         │
+├─────────────────────────────────────────────────────────────────────────┤
+│                                                                         │
+│  ┌─────────────────────────────────────────────────────────────────┐    │
+│  │                    Account Pool Manager                         │    │
+│  └─────────────────────────────────────────────────────────────────┘    │
+│                                │                                        │
+│          ┌────────────────────┼────────────────────┐                    │
+│          ▼                    ▼                    ▼                    │
+│  ┌───────────────┐   ┌───────────────┐   ┌───────────────┐              │
+│  │   Account 1   │   │   Account 2   │   │   Account 3   │              │
+│  │   (primary)   │   │   (backup)    │   │   (backup)    │              │
+│  ├───────────────┤   ├───────────────┤   ├───────────────┤              │
+│  │ Email: bot1@  │   │ Email: bot2@  │   │ Email: bot3@  │              │
+│  │ TOTP: ✓       │   │ TOTP: ✓       │   │ TOTP: ✓       │              │
+│  │ Profile: ✓    │   │ Profile: ✓    │   │ Profile: ✓    │              │
+│  │ Quota: 45/50  │   │ Quota: 50/50  │   │ Quota: 23/50  │              │
+│  │ Session: OK   │   │ Session: OK   │   │ Session: EXP  │◄─┐           │
+│  └───────────────┘   └───────────────┘   └───────────────┘  │           │
+│                                                             │           │
+│                                          Auto-Login ────────┘           │
+│                                                                         │
+├─────────────────────────────────────────────────────────────────────────┤
+│  STRATÉGIES DE SÉLECTION                                                │
+├─────────────────────────────────────────────────────────────────────────┤
+│                                                                         │
+│  LEAST_USED:    Utiliser le compte avec le plus de quota restant        │
+│  ROUND_ROBIN:   Alterner entre les comptes à chaque requête             │
+│  FAILOVER:      Compte principal, switch si problème                    │
+│                                                                         │
+├─────────────────────────────────────────────────────────────────────────┤
+│  COMPOSANTS                                                             │
+├─────────────────────────────────────────────────────────────────────────┤
+│                                                                         │
+│  SessionKeepAlive   → Cron 12h, maintient sessions actives              │
+│  HealthMonitor      → Vérifie état sessions, détecte expirations        │
+│  AutoLoginModule    → Re-login automatique si credentials stockés       │
+│  QuotaTracker       → Compte requêtes, évite rate limits                │
+│  AlertingService    → Notifie si tous comptes KO                        │
+│                                                                         │
+└─────────────────────────────────────────────────────────────────────────┘
+```
+
+### 9.4 Implémentation Technique
+
+#### Configuration accounts.json
+
+```json
+{
+  "accounts": [
+    {
+      "id": "account-1",
+      "email": "notebooklm.bot1@gmail.com",
+      "enabled": true,
+      "priority": 1,
+      "has_credentials": true,
+      "has_totp": true
+    },
+    {
+      "id": "account-2",
+      "email": "notebooklm.bot2@gmail.com",
+      "enabled": true,
+      "priority": 2,
+      "has_credentials": true,
+      "has_totp": true
+    },
+    {
+      "id": "account-3",
+      "email": "notebooklm.bot3@gmail.com",
+      "enabled": true,
+      "priority": 3,
+      "has_credentials": false,
+      "has_totp": false
+    }
+  ],
+  "rotation_strategy": "least_used",
+  "keep_alive_interval_hours": 12,
+  "auto_login_enabled": true,
+  "alert_webhook": "https://hooks.slack.com/..."
+}
+```
+
+#### Interface AccountManager
+
+```typescript
+interface Account {
+  id: string;
+  email: string;
+  profileDir: string;
+  quota: { used: number; limit: number; resetAt: Date };
+  sessionStatus: 'valid' | 'expiring' | 'expired';
+  lastActivity: Date;
+}
+
+interface AccountManager {
+  // Sélectionner le meilleur compte disponible
+  getBestAccount(): Promise<Account>;
+
+  // Incrémenter le quota après une requête
+  recordUsage(accountId: string): Promise<void>;
+
+  // Vérifier la santé de tous les comptes
+  healthCheck(): Promise<AccountHealth[]>;
+
+  // Auto-refresh si credentials stockés
+  refreshAccount(accountId: string): Promise<boolean>;
+
+  // Keep-alive pour maintenir les sessions
+  keepAlive(): Promise<void>;
+}
+```
+
+#### Auto-Login avec TOTP
+
+```typescript
+import { authenticator } from 'otplib';
+import { decrypt } from './crypto';
+
+class AutoLoginManager {
+  async performAutoLogin(account: AccountConfig): Promise<boolean> {
+    const page = await this.browser.newPage();
+
+    try {
+      // 1. Navigate to Google login
+      await page.goto('https://accounts.google.com/signin');
+      await page.waitForLoadState('networkidle');
+
+      // 2. Enter email
+      const email = decrypt(account.emailEncrypted);
+      await page.fill('input[type="email"]', email);
+      await page.click('#identifierNext');
+      await page.waitForNavigation();
+
+      // 3. Enter password
+      const password = decrypt(account.passwordEncrypted);
+      await page.fill('input[type="password"]', password);
+      await page.click('#passwordNext');
+      await page.waitForNavigation();
+
+      // 4. Handle 2FA if configured
+      if (account.totpSecretEncrypted) {
+        await this.handle2FA(page, account.totpSecretEncrypted);
+      }
+
+      // 5. Wait for successful login
+      await page.waitForURL('**/myaccount.google.com/**', { timeout: 30000 });
+
+      // 6. Navigate to NotebookLM to establish session
+      await page.goto('https://notebooklm.google.com');
+      await page.waitForLoadState('networkidle');
+
+      // 7. Save session state
+      const state = await page.context().storageState();
+      await this.saveSessionState(account.id, state);
+
+      log.success(`✅ Auto-login successful for ${account.email}`);
+      return true;
+    } catch (error) {
+      log.error(`❌ Auto-login failed for ${account.email}: ${error}`);
+      return false;
+    } finally {
+      await page.close();
+    }
+  }
+
+  private async handle2FA(page: Page, totpSecretEncrypted: string): Promise<void> {
+    // Wait for 2FA page
+    await page.waitForSelector('input[name="totpPin"]', { timeout: 10000 });
+
+    // Generate TOTP code
+    const secret = decrypt(totpSecretEncrypted);
+    const code = authenticator.generate(secret);
+
+    log.info(`  🔐 Entering 2FA code...`);
+    await page.fill('input[name="totpPin"]', code);
+    await page.click('#totpNext');
+    await page.waitForNavigation();
+  }
+}
+```
+
+### 9.5 Setup des Comptes Dédiés
+
+| Étape | Action                             | Notes                                      |
+| ----- | ---------------------------------- | ------------------------------------------ |
+| 1     | Créer 3-5 comptes Gmail dédiés     | Noms: `nblm.bot1@gmail.com`, etc.          |
+| 2     | Activer 2FA TOTP (recommandé)      | Utiliser Google Authenticator ou similaire |
+| 3     | Sauvegarder le secret TOTP         | Code affiché lors du setup (ou QR décodé)  |
+| 4     | Créer le fichier `credentials.enc` | Chiffrer avec clé AES-256                  |
+| 5     | Login initial manuel (1 fois)      | Pour établir le profil browser             |
+| 6     | Vérifier quota disponible          | 50 queries/jour par compte gratuit         |
+
+### 9.6 Risques et Mitigations
+
+| Risque                            | Probabilité | Impact   | Mitigation                                          |
+| --------------------------------- | ----------- | -------- | --------------------------------------------------- |
+| Google bloque "activité suspecte" | Moyenne     | Haut     | Profils persistants, comportement humain, IP stable |
+| CAPTCHA au login                  | Faible      | Moyen    | Retry avec délai, fallback autre compte             |
+| Credentials compromis             | Faible      | Critique | Chiffrement AES-256, comptes dédiés isolés          |
+| Tous comptes bloqués              | Très faible | Critique | Alerting immédiat, intervention manuelle            |
+| Changement UI Google login        | Faible      | Moyen    | Monitoring, mise à jour sélecteurs                  |
+
+### 9.7 Comparatif des Options
+
+| Critère              | Option 1 (No 2FA) | Option 2 (TOTP) | Option 3 (Keep-Alive) |
+| -------------------- | ----------------- | --------------- | --------------------- |
+| **Sécurité**         | ⚠️ Faible         | ✅ Bonne        | ✅ Bonne              |
+| **Complexité setup** | ✅ Simple         | ⚠️ Moyenne      | ✅ Simple             |
+| **Maintenance**      | ✅ Faible         | ✅ Faible       | ⚠️ Moyenne            |
+| **Fiabilité**        | ⚠️ Moyenne        | ✅ Bonne        | ⚠️ Moyenne            |
+| **Zero-touch**       | ✅ Oui            | ✅ Oui          | ⚠️ Partiel            |
+| **Recommandé**       | Dev/test          | **Production**  | Complément            |
+
+### 9.8 Recommandation Finale
+
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│  RECOMMANDATION POUR PRODUCTION                                         │
+├─────────────────────────────────────────────────────────────────────────┤
+│                                                                         │
+│  Combiner Option 2 (TOTP) + Option 3 (Keep-Alive):                      │
+│                                                                         │
+│  1. Pool de 3-5 comptes dédiés avec 2FA TOTP                            │
+│  2. Credentials + TOTP secrets chiffrés (AES-256)                       │
+│  3. Keep-alive cron toutes les 12h (prévention)                         │
+│  4. Auto-login avec TOTP si session expire (guérison)                   │
+│  5. Rotation LEAST_USED pour répartir la charge                         │
+│  6. Alerting si >50% des comptes en erreur                              │
+│                                                                         │
+│  Effort estimé: 3-5 jours de développement                              │
+│  Résultat: Système autonome 24/7 sans intervention humaine              │
+│                                                                         │
+└─────────────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## Annexes
+
+### D. Dépendances pour Auto-Login TOTP
+
+```json
+{
+  "dependencies": {
+    "otplib": "^12.0.1"
+  }
+}
+```
+
+### E. Exemple de Chiffrement Credentials
+
+```typescript
+import crypto from 'crypto';
+
+const ALGORITHM = 'aes-256-gcm';
+const KEY = process.env.CREDENTIALS_ENCRYPTION_KEY; // 32 bytes
+
+export function encrypt(text: string): string {
+  const iv = crypto.randomBytes(16);
+  const cipher = crypto.createCipheriv(ALGORITHM, Buffer.from(KEY, 'hex'), iv);
+  let encrypted = cipher.update(text, 'utf8', 'hex');
+  encrypted += cipher.final('hex');
+  const authTag = cipher.getAuthTag();
+  return `${iv.toString('hex')}:${authTag.toString('hex')}:${encrypted}`;
+}
+
+export function decrypt(encryptedData: string): string {
+  const [ivHex, authTagHex, encrypted] = encryptedData.split(':');
+  const iv = Buffer.from(ivHex, 'hex');
+  const authTag = Buffer.from(authTagHex, 'hex');
+  const decipher = crypto.createDecipheriv(ALGORITHM, Buffer.from(KEY, 'hex'), iv);
+  decipher.setAuthTag(authTag);
+  let decrypted = decipher.update(encrypted, 'hex', 'utf8');
+  decrypted += decipher.final('utf8');
+  return decrypted;
+}
+```
+
+### F. Références Authentification
+
+- [Playwright Authentication](https://playwright.dev/docs/auth)
+- [Google OAuth Refresh Tokens](https://developers.google.com/identity/protocols/oauth2)
+- [Puppeteer Session Cookie Management](https://www.webshare.io/academy-article/puppeteer-login)
+- [OAuth Tokens vs Cookies Discussion](https://github.com/puppeteer/puppeteer/issues/6615)
+- [otplib - TOTP Library](https://www.npmjs.com/package/otplib)
+
+---
+
+_Document généré le 23 décembre 2024_
 _Prochaine réévaluation recommandée: Mars 2025_
