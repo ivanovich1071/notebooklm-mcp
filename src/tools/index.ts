@@ -8,6 +8,9 @@
  * - reset_session: Reset session chat history
  * - get_health: Server health check
  * - setup_auth: Interactive authentication setup
+ * - add_source: Add document/source to notebook
+ * - generate_content: Generate audio, briefing, study guide, etc.
+ * - list_content: List sources and generated content
  *
  * Based on the Python implementation from tools/*.py
  */
@@ -32,6 +35,15 @@ import type {
 } from '../types.js';
 import { RateLimitError } from '../errors.js';
 import { CleanupManager } from '../utils/cleanup-manager.js';
+import { ContentManager } from '../content/content-manager.js';
+import type {
+  SourceUploadResult,
+  ContentGenerationResult,
+  NotebookContentOverview,
+  ContentDownloadResult,
+  ContentType,
+  SourceType,
+} from '../content/types.js';
 
 /**
  * Build dynamic tool description for ask_question based on active notebook or library
@@ -778,6 +790,161 @@ User: "Yes" → call remove_notebook`,
           },
         },
         required: ['confirm'],
+      },
+    },
+    // ========================================================================
+    // Content Management Tools
+    // ========================================================================
+    {
+      name: 'add_source',
+      description:
+        'Add a source (document, URL, text, YouTube video) to the current NotebookLM notebook.\n\n' +
+        'Supported source types:\n' +
+        '- file: Upload a local file (PDF, DOCX, TXT, etc.)\n' +
+        '- url: Add a web page URL\n' +
+        '- text: Paste text content directly\n' +
+        '- youtube: Add a YouTube video URL\n' +
+        '- google_drive: Add a Google Drive document link\n\n' +
+        'The source will be processed and indexed for use in conversations.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          source_type: {
+            type: 'string',
+            enum: ['file', 'url', 'text', 'youtube', 'google_drive'],
+            description: 'Type of source to add',
+          },
+          file_path: {
+            type: 'string',
+            description: 'Local file path (required for source_type="file")',
+          },
+          url: {
+            type: 'string',
+            description: 'URL (required for source_type="url", "youtube", "google_drive")',
+          },
+          text: {
+            type: 'string',
+            description: 'Text content (required for source_type="text")',
+          },
+          title: {
+            type: 'string',
+            description: 'Optional title/name for the source',
+          },
+          notebook_url: {
+            type: 'string',
+            description: 'Notebook URL. If not provided, uses the active notebook.',
+          },
+          session_id: {
+            type: 'string',
+            description: 'Session ID to reuse an existing session',
+          },
+        },
+        required: ['source_type'],
+      },
+    },
+    {
+      name: 'generate_audio',
+      description:
+        'Generate an Audio Overview (podcast-style summary) for the current notebook.\n\n' +
+        'NotebookLM will create a conversational audio summary of your sources with two AI hosts.\n' +
+        'Generation typically takes 2-5 minutes depending on source size.\n\n' +
+        'You can optionally provide custom instructions to focus the audio on specific topics.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          custom_instructions: {
+            type: 'string',
+            description:
+              'Optional instructions to guide the audio content (e.g., "Focus on the technical architecture")',
+          },
+          notebook_url: {
+            type: 'string',
+            description: 'Notebook URL. If not provided, uses the active notebook.',
+          },
+          session_id: {
+            type: 'string',
+            description: 'Session ID to reuse an existing session',
+          },
+        },
+      },
+    },
+    {
+      name: 'generate_content',
+      description:
+        'Generate various content types from your NotebookLM sources.\n\n' +
+        'Available content types:\n' +
+        '- briefing_doc: Executive briefing document\n' +
+        '- study_guide: Study guide with key concepts and questions\n' +
+        '- faq: Frequently asked questions document\n' +
+        '- timeline: Chronological timeline of events\n' +
+        '- table_of_contents: Structured table of contents\n\n' +
+        'The generated content is based on all sources in the notebook.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          content_type: {
+            type: 'string',
+            enum: ['briefing_doc', 'study_guide', 'faq', 'timeline', 'table_of_contents'],
+            description: 'Type of content to generate',
+          },
+          custom_instructions: {
+            type: 'string',
+            description: 'Optional instructions to customize the generated content',
+          },
+          notebook_url: {
+            type: 'string',
+            description: 'Notebook URL. If not provided, uses the active notebook.',
+          },
+          session_id: {
+            type: 'string',
+            description: 'Session ID to reuse an existing session',
+          },
+        },
+        required: ['content_type'],
+      },
+    },
+    {
+      name: 'list_content',
+      description:
+        'List all sources and generated content in the current notebook.\n\n' +
+        'Returns:\n' +
+        '- Sources: Documents, URLs, and other uploaded materials\n' +
+        '- Generated content: Audio overviews, briefings, study guides, etc.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          notebook_url: {
+            type: 'string',
+            description: 'Notebook URL. If not provided, uses the active notebook.',
+          },
+          session_id: {
+            type: 'string',
+            description: 'Session ID to reuse an existing session',
+          },
+        },
+      },
+    },
+    {
+      name: 'download_audio',
+      description:
+        'Download the generated Audio Overview from the current notebook.\n\n' +
+        'Returns the audio file path or URL for the generated podcast.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          output_path: {
+            type: 'string',
+            description: 'Optional local path to save the audio file',
+          },
+          notebook_url: {
+            type: 'string',
+            description: 'Notebook URL. If not provided, uses the active notebook.',
+          },
+          session_id: {
+            type: 'string',
+            description: 'Session ID to reuse an existing session',
+          },
+        },
       },
     },
   ];
@@ -1817,6 +1984,328 @@ export class ToolHandlers {
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
       log.error(`❌ [TOOL] cleanup_data failed: ${errorMessage}`);
+      return {
+        success: false,
+        error: errorMessage,
+      };
+    }
+  }
+
+  // ============================================================================
+  // Content Management Handlers
+  // ============================================================================
+
+  /**
+   * Handle add_source tool
+   */
+  async handleAddSource(args: {
+    source_type: SourceType;
+    file_path?: string;
+    url?: string;
+    text?: string;
+    title?: string;
+    notebook_url?: string;
+    session_id?: string;
+  }): Promise<ToolResult<SourceUploadResult>> {
+    const { source_type, file_path, url, text, title, notebook_url, session_id } = args;
+
+    log.info(`🔧 [TOOL] add_source called`);
+    log.info(`  Source type: ${source_type}`);
+
+    try {
+      // Resolve notebook URL
+      const resolvedNotebookUrl =
+        notebook_url || this.library.getActiveNotebook()?.url || CONFIG.notebookUrl;
+      if (!resolvedNotebookUrl) {
+        return {
+          success: false,
+          error: 'No notebook URL provided and no active notebook set',
+        };
+      }
+
+      // Get or create session
+      const session = await this.sessionManager.getOrCreateSession(session_id, resolvedNotebookUrl);
+      const page = session.getPage();
+
+      if (!page) {
+        return {
+          success: false,
+          error: 'Could not access browser page - session may not be initialized',
+        };
+      }
+
+      // Create content manager
+      const contentManager = new ContentManager(page);
+
+      // Add source
+      const result = await contentManager.addSource({
+        type: source_type,
+        filePath: file_path,
+        url,
+        text,
+        title,
+      });
+
+      if (result.success) {
+        log.success(`✅ [TOOL] add_source completed`);
+      } else {
+        log.error(`❌ [TOOL] add_source failed: ${result.error}`);
+      }
+
+      return {
+        success: result.success,
+        data: result,
+        error: result.error,
+      };
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      log.error(`❌ [TOOL] add_source failed: ${errorMessage}`);
+      return {
+        success: false,
+        error: errorMessage,
+      };
+    }
+  }
+
+  /**
+   * Handle generate_audio tool
+   */
+  async handleGenerateAudio(args: {
+    custom_instructions?: string;
+    notebook_url?: string;
+    session_id?: string;
+  }): Promise<ToolResult<ContentGenerationResult>> {
+    const { custom_instructions, notebook_url, session_id } = args;
+
+    log.info(`🔧 [TOOL] generate_audio called`);
+
+    try {
+      // Resolve notebook URL
+      const resolvedNotebookUrl =
+        notebook_url || this.library.getActiveNotebook()?.url || CONFIG.notebookUrl;
+      if (!resolvedNotebookUrl) {
+        return {
+          success: false,
+          error: 'No notebook URL provided and no active notebook set',
+        };
+      }
+
+      // Get or create session
+      const session = await this.sessionManager.getOrCreateSession(session_id, resolvedNotebookUrl);
+      const page = session.getPage();
+
+      if (!page) {
+        return {
+          success: false,
+          error: 'Could not access browser page',
+        };
+      }
+
+      // Create content manager
+      const contentManager = new ContentManager(page);
+
+      // Generate audio
+      const result = await contentManager.generateAudioOverview(
+        { type: 'audio_overview', customInstructions: custom_instructions },
+        { customInstructions: custom_instructions }
+      );
+
+      if (result.success) {
+        log.success(`✅ [TOOL] generate_audio completed`);
+      } else {
+        log.error(`❌ [TOOL] generate_audio failed: ${result.error}`);
+      }
+
+      return {
+        success: result.success,
+        data: result,
+        error: result.error,
+      };
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      log.error(`❌ [TOOL] generate_audio failed: ${errorMessage}`);
+      return {
+        success: false,
+        error: errorMessage,
+      };
+    }
+  }
+
+  /**
+   * Handle generate_content tool
+   */
+  async handleGenerateContent(args: {
+    content_type: ContentType;
+    custom_instructions?: string;
+    notebook_url?: string;
+    session_id?: string;
+  }): Promise<ToolResult<ContentGenerationResult>> {
+    const { content_type, custom_instructions, notebook_url, session_id } = args;
+
+    log.info(`🔧 [TOOL] generate_content called`);
+    log.info(`  Content type: ${content_type}`);
+
+    try {
+      // Resolve notebook URL
+      const resolvedNotebookUrl =
+        notebook_url || this.library.getActiveNotebook()?.url || CONFIG.notebookUrl;
+      if (!resolvedNotebookUrl) {
+        return {
+          success: false,
+          error: 'No notebook URL provided and no active notebook set',
+        };
+      }
+
+      // Get or create session
+      const session = await this.sessionManager.getOrCreateSession(session_id, resolvedNotebookUrl);
+      const page = session.getPage();
+
+      if (!page) {
+        return {
+          success: false,
+          error: 'Could not access browser page',
+        };
+      }
+
+      // Create content manager
+      const contentManager = new ContentManager(page);
+
+      // Generate content
+      const result = await contentManager.generateContent({
+        type: content_type,
+        customInstructions: custom_instructions,
+      });
+
+      if (result.success) {
+        log.success(`✅ [TOOL] generate_content completed`);
+      } else {
+        log.error(`❌ [TOOL] generate_content failed: ${result.error}`);
+      }
+
+      return {
+        success: result.success,
+        data: result,
+        error: result.error,
+      };
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      log.error(`❌ [TOOL] generate_content failed: ${errorMessage}`);
+      return {
+        success: false,
+        error: errorMessage,
+      };
+    }
+  }
+
+  /**
+   * Handle list_content tool
+   */
+  async handleListContent(args: {
+    notebook_url?: string;
+    session_id?: string;
+  }): Promise<ToolResult<NotebookContentOverview>> {
+    const { notebook_url, session_id } = args;
+
+    log.info(`🔧 [TOOL] list_content called`);
+
+    try {
+      // Resolve notebook URL
+      const resolvedNotebookUrl =
+        notebook_url || this.library.getActiveNotebook()?.url || CONFIG.notebookUrl;
+      if (!resolvedNotebookUrl) {
+        return {
+          success: false,
+          error: 'No notebook URL provided and no active notebook set',
+        };
+      }
+
+      // Get or create session
+      const session = await this.sessionManager.getOrCreateSession(session_id, resolvedNotebookUrl);
+      const page = session.getPage();
+
+      if (!page) {
+        return {
+          success: false,
+          error: 'Could not access browser page',
+        };
+      }
+
+      // Create content manager
+      const contentManager = new ContentManager(page);
+
+      // Get content overview
+      const result = await contentManager.getContentOverview();
+
+      log.success(`✅ [TOOL] list_content completed (${result.sourceCount} sources)`);
+
+      return {
+        success: true,
+        data: result,
+      };
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      log.error(`❌ [TOOL] list_content failed: ${errorMessage}`);
+      return {
+        success: false,
+        error: errorMessage,
+      };
+    }
+  }
+
+  /**
+   * Handle download_audio tool
+   */
+  async handleDownloadAudio(args: {
+    output_path?: string;
+    notebook_url?: string;
+    session_id?: string;
+  }): Promise<ToolResult<ContentDownloadResult>> {
+    const { output_path, notebook_url, session_id } = args;
+
+    log.info(`🔧 [TOOL] download_audio called`);
+
+    try {
+      // Resolve notebook URL
+      const resolvedNotebookUrl =
+        notebook_url || this.library.getActiveNotebook()?.url || CONFIG.notebookUrl;
+      if (!resolvedNotebookUrl) {
+        return {
+          success: false,
+          error: 'No notebook URL provided and no active notebook set',
+        };
+      }
+
+      // Get or create session
+      const session = await this.sessionManager.getOrCreateSession(session_id, resolvedNotebookUrl);
+      const page = session.getPage();
+
+      if (!page) {
+        return {
+          success: false,
+          error: 'Could not access browser page',
+        };
+      }
+
+      // Create content manager
+      const contentManager = new ContentManager(page);
+
+      // Download audio
+      const result = await contentManager.downloadAudio(output_path);
+
+      if (result.success) {
+        log.success(`✅ [TOOL] download_audio completed: ${result.filePath}`);
+      } else {
+        log.error(`❌ [TOOL] download_audio failed: ${result.error}`);
+      }
+
+      return {
+        success: result.success,
+        data: result,
+        error: result.error,
+      };
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      log.error(`❌ [TOOL] download_audio failed: ${errorMessage}`);
       return {
         success: false,
         error: errorMessage,
