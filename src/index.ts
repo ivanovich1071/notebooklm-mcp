@@ -481,6 +481,66 @@ class NotebookLMMCPServer {
             result = await this.toolHandlers.handleCleanupData(args as { confirm: boolean });
             break;
 
+          // Content Management Tools
+          case 'add_source':
+            result = await this.toolHandlers.handleAddSource(
+              args as {
+                source_type: 'file' | 'url' | 'text' | 'youtube' | 'google_drive';
+                file_path?: string;
+                url?: string;
+                text?: string;
+                title?: string;
+                notebook_url?: string;
+                session_id?: string;
+              }
+            );
+            break;
+
+          case 'generate_audio':
+            result = await this.toolHandlers.handleGenerateAudio(
+              args as {
+                custom_instructions?: string;
+                notebook_url?: string;
+                session_id?: string;
+              }
+            );
+            break;
+
+          case 'generate_content':
+            result = await this.toolHandlers.handleGenerateContent(
+              args as {
+                content_type:
+                  | 'briefing_doc'
+                  | 'study_guide'
+                  | 'faq'
+                  | 'timeline'
+                  | 'table_of_contents';
+                custom_instructions?: string;
+                notebook_url?: string;
+                session_id?: string;
+              }
+            );
+            break;
+
+          case 'list_content':
+            result = await this.toolHandlers.handleListContent(
+              args as {
+                notebook_url?: string;
+                session_id?: string;
+              }
+            );
+            break;
+
+          case 'download_audio':
+            result = await this.toolHandlers.handleDownloadAudio(
+              args as {
+                output_path?: string;
+                notebook_url?: string;
+                session_id?: string;
+              }
+            );
+            break;
+
           default:
             log.error(`❌ [MCP] Unknown tool: ${name}`);
             return {
