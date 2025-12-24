@@ -382,6 +382,128 @@ app.post('/sessions/:id/reset', async (req: Request, res: Response) => {
   }
 });
 
+// ========================================
+// Content Management Routes
+// ========================================
+
+// Add source to notebook
+app.post('/content/sources', async (req: Request, res: Response) => {
+  try {
+    const { source_type, file_path, url, text, title, notebook_url, session_id } = req.body;
+
+    if (!source_type) {
+      return res.status(400).json({
+        success: false,
+        error: 'Missing required field: source_type',
+      });
+    }
+
+    const result = await toolHandlers.handleAddSource({
+      source_type,
+      file_path,
+      url,
+      text,
+      title,
+      notebook_url,
+      session_id,
+    });
+
+    res.json(result);
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
+});
+
+// Generate audio overview
+app.post('/content/audio', async (req: Request, res: Response) => {
+  try {
+    const { custom_instructions, notebook_url, session_id } = req.body;
+
+    const result = await toolHandlers.handleGenerateAudio({
+      custom_instructions,
+      notebook_url,
+      session_id,
+    });
+
+    res.json(result);
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
+});
+
+// Generate content (briefing, study guide, FAQ, etc.)
+app.post('/content/generate', async (req: Request, res: Response) => {
+  try {
+    const { content_type, custom_instructions, notebook_url, session_id } = req.body;
+
+    if (!content_type) {
+      return res.status(400).json({
+        success: false,
+        error: 'Missing required field: content_type',
+      });
+    }
+
+    const result = await toolHandlers.handleGenerateContent({
+      content_type,
+      custom_instructions,
+      notebook_url,
+      session_id,
+    });
+
+    res.json(result);
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
+});
+
+// List sources and generated content
+app.get('/content', async (req: Request, res: Response) => {
+  try {
+    const { notebook_url, session_id } = req.query;
+
+    const result = await toolHandlers.handleListContent({
+      notebook_url: notebook_url as string | undefined,
+      session_id: session_id as string | undefined,
+    });
+
+    res.json(result);
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
+});
+
+// Download audio file
+app.get('/content/audio/download', async (req: Request, res: Response) => {
+  try {
+    const { output_path, notebook_url, session_id } = req.query;
+
+    const result = await toolHandlers.handleDownloadAudio({
+      output_path: output_path as string | undefined,
+      notebook_url: notebook_url as string | undefined,
+      session_id: session_id as string | undefined,
+    });
+
+    res.json(result);
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
+});
+
 // Start server
 const PORT = Number(process.env.HTTP_PORT) || 3000;
 const HOST = process.env.HTTP_HOST || '0.0.0.0';
@@ -420,6 +542,13 @@ app.listen(PORT, HOST, () => {
   log.info('   GET    /sessions               List active sessions');
   log.info('   POST   /sessions/:id/reset     Reset session history');
   log.info('   DELETE /sessions/:id           Close a session');
+  log.info('');
+  log.info('   Content Management:');
+  log.info('   POST   /content/sources        Add source to notebook');
+  log.info('   POST   /content/audio          Generate audio overview');
+  log.info('   POST   /content/generate       Generate content (briefing, etc.)');
+  log.info('   GET    /content                List sources and content');
+  log.info('   GET    /content/audio/download Download audio file');
   log.info('');
   log.info('💡 Configuration:');
   log.info(
