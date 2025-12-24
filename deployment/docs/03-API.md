@@ -14,7 +14,7 @@ Or for network access: `http://<SERVER-IP>:3000`
 
 ---
 
-## 📡 Available Endpoints (22 total)
+## 📡 Available Endpoints (27 total)
 
 ### Authentication
 
@@ -53,6 +53,16 @@ Or for network access: `http://<SERVER-IP>:3000`
 | `GET`    | `/sessions`           | List active sessions  |
 | `POST`   | `/sessions/:id/reset` | Reset session history |
 | `DELETE` | `/sessions/:id`       | Close a session       |
+
+### Content Management (NEW)
+
+| Method | Endpoint                  | Description                          |
+| ------ | ------------------------- | ------------------------------------ |
+| `POST` | `/content/sources`        | Add source/document to notebook      |
+| `POST` | `/content/audio`          | Generate audio overview (podcast)    |
+| `POST` | `/content/generate`       | Generate briefing, study guide, etc. |
+| `GET`  | `/content`                | List sources and generated content   |
+| `GET`  | `/content/audio/download` | Download generated audio file        |
 
 ---
 
@@ -972,6 +982,243 @@ curl -X POST http://localhost:3000/sessions/9a580eee/reset
 | `404` | Not Found             | Resource not found                           |
 | `500` | Internal Server Error | Server error                                 |
 | `503` | Service Unavailable   | Server overloaded (too many sessions)        |
+
+---
+
+## 15. Add Source to Notebook
+
+### `POST /content/sources`
+
+Add a document/source to a notebook. Supports multiple source types.
+
+**Request:**
+
+```bash
+# Add URL source
+curl -X POST http://localhost:3000/content/sources \
+  -H "Content-Type: application/json" \
+  -d '{
+    "source_type": "url",
+    "url": "https://example.com/article",
+    "notebook_url": "https://notebooklm.google.com/notebook/abc123"
+  }'
+
+# Add text content
+curl -X POST http://localhost:3000/content/sources \
+  -H "Content-Type: application/json" \
+  -d '{
+    "source_type": "text",
+    "text": "Your document content here...",
+    "title": "My Document"
+  }'
+
+# Add YouTube video
+curl -X POST http://localhost:3000/content/sources \
+  -H "Content-Type: application/json" \
+  -d '{
+    "source_type": "youtube",
+    "url": "https://www.youtube.com/watch?v=VIDEO_ID"
+  }'
+```
+
+**Body Parameters:**
+
+| Parameter      | Type   | Required | Description                                            |
+| -------------- | ------ | -------- | ------------------------------------------------------ |
+| `source_type`  | string | ✅ Yes   | Type: `file`, `url`, `text`, `youtube`, `google_drive` |
+| `file_path`    | string | ❌ No    | Local file path (for `file` type)                      |
+| `url`          | string | ❌ No    | URL (for `url`, `youtube`, `google_drive` types)       |
+| `text`         | string | ❌ No    | Text content (for `text` type)                         |
+| `title`        | string | ❌ No    | Optional title for the source                          |
+| `notebook_url` | string | ❌ No    | Target notebook URL                                    |
+| `session_id`   | string | ❌ No    | Reuse existing session                                 |
+
+**Success Response (200):**
+
+```json
+{
+  "success": true,
+  "sourceName": "My Document",
+  "status": "ready"
+}
+```
+
+---
+
+## 16. Generate Audio Overview
+
+### `POST /content/audio`
+
+Generate an audio overview (podcast-style) from notebook sources.
+
+**Request:**
+
+```bash
+curl -X POST http://localhost:3000/content/audio \
+  -H "Content-Type: application/json" \
+  -d '{
+    "custom_instructions": "Focus on key concepts for beginners",
+    "notebook_url": "https://notebooklm.google.com/notebook/abc123"
+  }'
+```
+
+**Body Parameters:**
+
+| Parameter             | Type   | Required | Description                         |
+| --------------------- | ------ | -------- | ----------------------------------- |
+| `custom_instructions` | string | ❌ No    | Custom focus/instructions for audio |
+| `notebook_url`        | string | ❌ No    | Target notebook URL                 |
+| `session_id`          | string | ❌ No    | Reuse existing session              |
+
+**Success Response (200):**
+
+```json
+{
+  "success": true,
+  "contentType": "audio_overview",
+  "status": "ready"
+}
+```
+
+**Note:** Audio generation can take several minutes (5-10 min typically).
+
+---
+
+## 17. Generate Content
+
+### `POST /content/generate`
+
+Generate various content types from notebook sources.
+
+**Request:**
+
+```bash
+# Generate briefing document
+curl -X POST http://localhost:3000/content/generate \
+  -H "Content-Type: application/json" \
+  -d '{
+    "content_type": "briefing_doc",
+    "notebook_url": "https://notebooklm.google.com/notebook/abc123"
+  }'
+
+# Generate study guide
+curl -X POST http://localhost:3000/content/generate \
+  -H "Content-Type: application/json" \
+  -d '{
+    "content_type": "study_guide",
+    "custom_instructions": "Include practice questions"
+  }'
+```
+
+**Body Parameters:**
+
+| Parameter             | Type   | Required | Description                                                                 |
+| --------------------- | ------ | -------- | --------------------------------------------------------------------------- |
+| `content_type`        | string | ✅ Yes   | Type: `briefing_doc`, `study_guide`, `faq`, `timeline`, `table_of_contents` |
+| `custom_instructions` | string | ❌ No    | Custom instructions for generation                                          |
+| `notebook_url`        | string | ❌ No    | Target notebook URL                                                         |
+| `session_id`          | string | ❌ No    | Reuse existing session                                                      |
+
+**Content Types:**
+
+| Type                | Description                         |
+| ------------------- | ----------------------------------- |
+| `briefing_doc`      | Executive summary/briefing document |
+| `study_guide`       | Study guide with learning cards     |
+| `faq`               | Frequently asked questions          |
+| `timeline`          | Chronological timeline              |
+| `table_of_contents` | Table of contents/outline           |
+
+**Success Response (200):**
+
+```json
+{
+  "success": true,
+  "contentType": "study_guide",
+  "status": "ready",
+  "textContent": "Generated content here..."
+}
+```
+
+---
+
+## 18. List Content
+
+### `GET /content`
+
+List all sources and generated content in a notebook.
+
+**Request:**
+
+```bash
+curl "http://localhost:3000/content?notebook_url=https://notebooklm.google.com/notebook/abc123"
+```
+
+**Query Parameters:**
+
+| Parameter      | Type   | Required | Description            |
+| -------------- | ------ | -------- | ---------------------- |
+| `notebook_url` | string | ❌ No    | Target notebook URL    |
+| `session_id`   | string | ❌ No    | Reuse existing session |
+
+**Success Response (200):**
+
+```json
+{
+  "success": true,
+  "sources": [
+    {
+      "id": "source-1",
+      "name": "Introduction Document",
+      "type": "document",
+      "status": "ready"
+    }
+  ],
+  "generatedContent": [
+    {
+      "id": "audio-overview",
+      "type": "audio_overview",
+      "name": "Audio Overview",
+      "status": "ready",
+      "createdAt": "2025-12-24T10:30:00Z"
+    }
+  ],
+  "sourceCount": 3,
+  "hasAudioOverview": true
+}
+```
+
+---
+
+## 19. Download Audio
+
+### `GET /content/audio/download`
+
+Download the generated audio overview file.
+
+**Request:**
+
+```bash
+curl "http://localhost:3000/content/audio/download?output_path=/path/to/save/audio.wav"
+```
+
+**Query Parameters:**
+
+| Parameter      | Type   | Required | Description                   |
+| -------------- | ------ | -------- | ----------------------------- |
+| `output_path`  | string | ❌ No    | Local path to save audio file |
+| `notebook_url` | string | ❌ No    | Target notebook URL           |
+| `session_id`   | string | ❌ No    | Reuse existing session        |
+
+**Success Response (200):**
+
+```json
+{
+  "success": true,
+  "filePath": "/path/to/save/audio.wav",
+  "mimeType": "audio/wav"
+}
+```
 
 ---
 
