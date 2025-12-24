@@ -269,6 +269,84 @@ function buildProxyToolDefinitions(): Tool[] {
         required: ['confirm'],
       },
     },
+    // Content Management Tools
+    {
+      name: 'add_source',
+      description: '🔌 [PROXY] Add source/document to notebook via HTTP server',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          source_type: {
+            type: 'string',
+            enum: ['file', 'url', 'text', 'youtube', 'google_drive'],
+            description: 'Type of source to add',
+          },
+          file_path: { type: 'string', description: 'Path to file (for file type)' },
+          url: { type: 'string', description: 'URL (for url/youtube/google_drive types)' },
+          text: { type: 'string', description: 'Text content (for text type)' },
+          title: { type: 'string', description: 'Optional title for the source' },
+          notebook_url: { type: 'string', description: 'Optional notebook URL' },
+          session_id: { type: 'string', description: 'Optional session ID' },
+        },
+        required: ['source_type'],
+      },
+    },
+    {
+      name: 'generate_audio',
+      description: '🔌 [PROXY] Generate audio overview (podcast) via HTTP server',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          custom_instructions: {
+            type: 'string',
+            description: 'Custom focus/instructions for audio',
+          },
+          notebook_url: { type: 'string', description: 'Optional notebook URL' },
+          session_id: { type: 'string', description: 'Optional session ID' },
+        },
+      },
+    },
+    {
+      name: 'generate_content',
+      description: '🔌 [PROXY] Generate content (briefing, study guide, FAQ, etc.) via HTTP server',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          content_type: {
+            type: 'string',
+            enum: ['briefing_doc', 'study_guide', 'faq', 'timeline', 'table_of_contents'],
+            description: 'Type of content to generate',
+          },
+          custom_instructions: { type: 'string', description: 'Custom instructions' },
+          notebook_url: { type: 'string', description: 'Optional notebook URL' },
+          session_id: { type: 'string', description: 'Optional session ID' },
+        },
+        required: ['content_type'],
+      },
+    },
+    {
+      name: 'list_content',
+      description: '🔌 [PROXY] List sources and generated content via HTTP server',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          notebook_url: { type: 'string', description: 'Optional notebook URL' },
+          session_id: { type: 'string', description: 'Optional session ID' },
+        },
+      },
+    },
+    {
+      name: 'download_audio',
+      description: '🔌 [PROXY] Download generated audio file via HTTP server',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          output_path: { type: 'string', description: 'Local path to save the audio file' },
+          notebook_url: { type: 'string', description: 'Optional notebook URL' },
+          session_id: { type: 'string', description: 'Optional session ID' },
+        },
+      },
+    },
   ];
 }
 
@@ -343,6 +421,36 @@ async function handleToolCall(
 
       case 'cleanup_data':
         return await httpRequest('POST', '/cleanup-data', args);
+
+      // Content Management endpoints
+      case 'add_source':
+        return await httpRequest('POST', '/content/sources', args);
+
+      case 'generate_audio':
+        return await httpRequest('POST', '/content/audio', args);
+
+      case 'generate_content':
+        return await httpRequest('POST', '/content/generate', args);
+
+      case 'list_content': {
+        const queryParams = new URLSearchParams();
+        if (args.notebook_url) queryParams.set('notebook_url', String(args.notebook_url));
+        if (args.session_id) queryParams.set('session_id', String(args.session_id));
+        const query = queryParams.toString();
+        return await httpRequest('GET', `/content${query ? `?${query}` : ''}`);
+      }
+
+      case 'download_audio': {
+        const downloadParams = new URLSearchParams();
+        if (args.output_path) downloadParams.set('output_path', String(args.output_path));
+        if (args.notebook_url) downloadParams.set('notebook_url', String(args.notebook_url));
+        if (args.session_id) downloadParams.set('session_id', String(args.session_id));
+        const downloadQuery = downloadParams.toString();
+        return await httpRequest(
+          'GET',
+          `/content/audio/download${downloadQuery ? `?${downloadQuery}` : ''}`
+        );
+      }
 
       default:
         return { success: false, error: `Unknown tool: ${name}` };
