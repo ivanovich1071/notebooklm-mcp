@@ -12,7 +12,9 @@ This document tracks planned features, recent implementations, and future ideas 
 
 **Priority: High** - Complete NotebookLM Studio features.
 
-**Audio Overviews (partial - needs options):**
+#### Phase 1 - Core Content Generation
+
+**1. Audio Overviews (partial - needs options):**
 
 - [x] Generate audio overview (basic)
 - [x] Download audio file
@@ -21,59 +23,66 @@ This document tracks planned features, recent implementations, and future ideas 
 - [ ] Length/duration control
 - [ ] Language selection (80+ languages)
 
-**Video Overviews (NEW):**
+**2. Video Overviews:**
 
 - [ ] Generate video overview
 - [ ] Format selection: Brief, Explainer
 - [ ] Visual style selection (6 styles via Nano Banana AI)
 - [ ] Download video file
 
-**Mind Maps (NEW):**
-
-- [ ] Generate mind map from sources
-- [ ] Expand/collapse nodes
-- [ ] Download as image (PNG/SVG)
-
-**Reports:**
-
-- [ ] Generate briefing doc (basic)
-- [ ] Full report generation (2,000-3,000 words)
-- [ ] Section customization
-- [ ] Download as PDF/DOCX
-
-**Infographics (NEW):**
+**3. Infographics:**
 
 - [ ] Generate infographic
 - [ ] Format: Horizontal (16:9) for LinkedIn/blogs
 - [ ] Format: Vertical (9:16) for Instagram/TikTok
 - [ ] Download as image
 
-**Slide Decks / Presentations (NEW):**
+**4. Reports:**
+
+- [ ] Generate briefing doc (basic)
+- [ ] Full report generation (2,000-3,000 words)
+- [ ] Section customization
+- [ ] Download as PDF/DOCX
+
+**5. Slide Decks / Presentations:**
 
 - [ ] Generate presentation
 - [ ] AI-generated images (Nano Banana Pro)
 - [ ] Theme/style selection
 - [ ] Download as PDF/PPTX
 
-**Data Tables (NEW):**
+**6. Data Tables:**
 
 - [ ] Generate data table from sources
 - [ ] Format: CSV, Excel
 - [ ] Column customization
 - [ ] Download as CSV/XLSX
 
-**Study Resources:**
+#### Phase 2 - Study & Learning
 
-- [ ] Generate study guide (basic)
-- [ ] Generate FAQ
-- [ ] Generate timeline
-- [ ] Generate table of contents
+**7. Mind Maps:**
+
+- [ ] Generate mind map from sources
+- [ ] Expand/collapse nodes
+- [ ] Download as image (PNG/SVG)
+
+**8. Quiz:**
+
 - [ ] Generate quiz with questions
-- [ ] Generate flashcards
-- [ ] Key terms extraction
-- [ ] Download all formats
+- [ ] Question types (MCQ, true/false, open)
+- [ ] Difficulty levels
+- [ ] Export quiz
 
-**Download & Export (PRIORITY):**
+**9. Learning Cards (Flashcards):**
+
+- [ ] Generate flashcards from sources
+- [ ] Card format customization
+- [ ] Spaced repetition support
+- [ ] Export as Anki/Quizlet
+
+#### Phase 3 - Additional Features
+
+**Download & Export:**
 
 - [ ] Universal download for ALL content types
 - [ ] Dynamic format detection from UI
