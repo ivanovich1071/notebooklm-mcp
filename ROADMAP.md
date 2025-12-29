@@ -82,11 +82,6 @@ This document tracks planned features, recent implementations, and future ideas 
 
 #### Phase 3 - Additional Features
 
-**Download & Export:**
-
-- [ ] Universal download for ALL content types
-- [ ] Dynamic format detection from UI
-- [ ] Endpoint: `GET /content/download?type=...&format=...`
 
 **Note Management:**
 
