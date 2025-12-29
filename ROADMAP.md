@@ -12,11 +12,30 @@ This document tracks planned features, recent implementations, and future ideas 
 
 **Priority: High** - Complete NotebookLM Studio features.
 
-**Document Download (PRIORITY):**
+**Content Generation - Phase 1 (PRIORITY):**
 
-- [ ] Download ALL generated content types (briefing, study guide, FAQ, timeline, TOC)
+| Type            | Status  | Options to explore                   |
+| --------------- | ------- | ------------------------------------ |
+| Audio (podcast) | ✅ Done | Voices, language, duration, style    |
+| Video           | ⬚ TODO  | Format, resolution, style, narration |
+| Infographic     | ⬚ TODO  | Style, layout, color scheme          |
+| Report          | ⬚ TODO  | Format (PDF/DOCX), sections, depth   |
+| Presentation    | ⬚ TODO  | Slides format, theme, speaker notes  |
+| Data table      | ⬚ TODO  | Format (CSV/Excel), columns, filters |
+
+**Content Generation - Phase 2:**
+
+| Type                        | Status | Options to explore                  |
+| --------------------------- | ------ | ----------------------------------- |
+| Mind map                    | ⬚ TODO | Layout, depth, export format        |
+| Quiz                        | ⬚ TODO | Question types, difficulty, scoring |
+| Learning cards (flashcards) | ⬚ TODO | Card format, spaced repetition      |
+
+**Download & Export (PRIORITY):**
+
+- [ ] Download ALL generated content types
 - [ ] Support all export formats offered by NotebookLM UI (dynamic detection)
-- [ ] Endpoint: `GET /content/download?type=study_guide&format=...`
+- [ ] Endpoint: `GET /content/download?type=...&format=...`
 
 **Note Management:**
 
