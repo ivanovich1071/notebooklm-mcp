@@ -16,6 +16,27 @@ import { randomDelay, realisticClick, humanType } from '../utils/stealth-utils.j
 import { log } from '../utils/logger.js';
 import { CONFIG } from '../config.js';
 import { waitForLatestAnswer, snapshotAllResponses, isErrorMessage } from '../utils/page-utils.js';
+import { setLocale, tAll } from '../i18n/index.js';
+
+// Initialize i18n with configured locale
+setLocale(CONFIG.uiLocale);
+
+/**
+ * Build selectors for all supported locales
+ * @param template Selector template with {text} placeholder
+ * @param category i18n category (e.g., 'tabs', 'buttons')
+ * @param key i18n key within the category
+ * @returns Array of selectors for all locales
+ */
+function i18nSelectors(
+  template: string,
+  category: 'tabs' | 'buttons' | 'sourceTypes' | 'sourceNames' | 'contentTypes' | 'actions',
+  key: string
+): string[] {
+  const texts = tAll(category, key);
+  return texts.map((text) => template.replace('{text}', text));
+}
+
 import type {
   SourceUploadInput,
   SourceUploadResult,
@@ -193,10 +214,10 @@ export class ContentManager {
     }
 
     const sourcesTabSelectors = [
-      // NotebookLM current UI (Dec 2024) - MDC tabs
-      'div.mdc-tab:has-text("Sources")',
-      '.mat-mdc-tab:has-text("Sources")',
-      '[role="tab"]:has-text("Sources")',
+      // NotebookLM current UI (Dec 2024) - MDC tabs (bilingual FR/EN via i18n)
+      ...i18nSelectors('div.mdc-tab:has-text("{text}")', 'tabs', 'sources'),
+      ...i18nSelectors('.mat-mdc-tab:has-text("{text}")', 'tabs', 'sources'),
+      ...i18nSelectors('[role="tab"]:has-text("{text}")', 'tabs', 'sources'),
       // First tab in the tab list (Sources is typically first)
       '.mat-mdc-tab-list .mdc-tab:first-child',
     ];
@@ -582,18 +603,13 @@ export class ContentManager {
     log.info(`  📝 Adding text content (${input.text.length} chars)`);
 
     try {
-      // Click on paste text option
-      // NotebookLM dialog shows: "Coller du texte" (French) with "Texte copié" span inside a clickable element
+      // Click on paste text option (bilingual FR/EN via i18n)
       const textTypeSelectors = [
-        // French UI (current NotebookLM Dec 2024) - span element
-        'span:has-text("Texte copié")',
-        ':has-text("Texte copié")',
+        // Span element with pasted text label
+        ...i18nSelectors('span:has-text("{text}")', 'sourceTypes', 'pastedText'),
+        ...i18nSelectors(':has-text("{text}")', 'sourceTypes', 'pastedText'),
         // Parent of the span (clickable area)
-        '*:has(> span:has-text("Texte copié"))',
-        // English UI
-        'span:has-text("Copied text")',
-        ':has-text("Copied text")',
-        '*:has(> span:has-text("Copied text"))',
+        ...i18nSelectors('*:has(> span:has-text("{text}"))', 'sourceTypes', 'pastedText'),
         // Generic fallbacks
         'span:has-text("Paste text")',
         ':has-text("Paste text")',
@@ -1871,10 +1887,11 @@ export class ContentManager {
     // The tabs are: Sources | Discussion | Studio
     // Tab class: mdc-tab mat-mdc-tab mat-focus-indicator
     const studioSelectors = [
-      'div.mdc-tab:has-text("Studio")', // Material Design tab with text
-      '.mat-mdc-tab:has-text("Studio")', // Angular Material tab
-      '[role="tab"]:has-text("Studio")', // Tab role with Studio text
-      'div.mdc-tab >> text=Studio', // Playwright text selector
+      // Material Design tabs (bilingual FR/EN via i18n)
+      ...i18nSelectors('div.mdc-tab:has-text("{text}")', 'tabs', 'studio'),
+      ...i18nSelectors('.mat-mdc-tab:has-text("{text}")', 'tabs', 'studio'),
+      ...i18nSelectors('[role="tab"]:has-text("{text}")', 'tabs', 'studio'),
+      ...i18nSelectors('div.mdc-tab >> text={text}', 'tabs', 'studio'),
       '.notebook-guide', // Legacy fallback
     ];
 
@@ -2403,19 +2420,13 @@ export class ContentManager {
    */
   private async clickDeleteOption(): Promise<boolean> {
     const deleteSelectors = [
-      // Menu item selectors
-      'button:has-text("Delete")',
-      'button:has-text("Supprimer")',
-      'button:has-text("Remove")',
-      'button:has-text("Retirer")',
-      '[role="menuitem"]:has-text("Delete")',
-      '[role="menuitem"]:has-text("Supprimer")',
-      '[role="menuitem"]:has-text("Remove")',
-      '[role="menuitem"]:has-text("Retirer")',
-      'mat-menu-item:has-text("Delete")',
-      'mat-menu-item:has-text("Remove")',
-      '.mat-menu-item:has-text("Delete")',
-      '.mat-menu-item:has-text("Remove")',
+      // Menu item selectors (bilingual FR/EN via i18n)
+      ...i18nSelectors('button:has-text("{text}")', 'buttons', 'delete'),
+      ...i18nSelectors('button:has-text("{text}")', 'buttons', 'remove'),
+      ...i18nSelectors('[role="menuitem"]:has-text("{text}")', 'buttons', 'delete'),
+      ...i18nSelectors('[role="menuitem"]:has-text("{text}")', 'buttons', 'remove'),
+      ...i18nSelectors('mat-menu-item:has-text("{text}")', 'buttons', 'delete'),
+      ...i18nSelectors('.mat-menu-item:has-text("{text}")', 'buttons', 'delete'),
       // With icons
       'button:has(mat-icon:has-text("delete"))',
       '[role="menuitem"]:has(mat-icon:has-text("delete"))',

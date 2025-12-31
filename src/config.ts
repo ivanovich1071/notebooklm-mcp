@@ -76,6 +76,9 @@ export interface Config {
   cleanupInstancesOnShutdown: boolean;
   instanceProfileTtlHours: number;
   instanceProfileMaxCount: number;
+
+  // UI Locale (NotebookLM follows Google Account language)
+  uiLocale: 'fr' | 'en';
 }
 
 /**
@@ -130,6 +133,9 @@ const DEFAULTS: Config = {
   cleanupInstancesOnShutdown: true,
   instanceProfileTtlHours: 72,
   instanceProfileMaxCount: 20,
+
+  // UI Locale (default: French - matches most common Google Account language)
+  uiLocale: 'fr',
 };
 
 /**
@@ -173,6 +179,18 @@ function parseProfileStrategy(
   if (!value) return defaultValue;
   const lower = value.toLowerCase();
   if (lower === 'auto' || lower === 'single' || lower === 'isolated') {
+    return lower;
+  }
+  return defaultValue;
+}
+
+/**
+ * Parse UI locale from string (for env vars)
+ */
+function parseLocale(value: string | undefined, defaultValue: Config['uiLocale']): Config['uiLocale'] {
+  if (!value) return defaultValue;
+  const lower = value.toLowerCase();
+  if (lower === 'fr' || lower === 'en') {
     return lower;
   }
   return defaultValue;
@@ -249,6 +267,7 @@ function applyEnvOverrides(config: Config): Config {
       process.env.NOTEBOOK_INSTANCE_MAX_COUNT,
       config.instanceProfileMaxCount
     ),
+    uiLocale: parseLocale(process.env.NOTEBOOKLM_UI_LOCALE, config.uiLocale),
   };
 }
 
