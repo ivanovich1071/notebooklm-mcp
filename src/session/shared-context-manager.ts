@@ -303,6 +303,7 @@ export class SharedContextManager {
       if (CONFIG.cloneProfileOnIsolated && fs.existsSync(baseProfile)) {
         log.info('  🧬 Cloning base Chrome profile into isolated instance (may take time)...');
         // Best-effort clone without locks
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- fs.promises.cp typing incomplete in older @types/node
         await (fs.promises as any).cp(baseProfile, dir, {
           recursive: true,
           errorOnExist: false,
@@ -311,7 +312,7 @@ export class SharedContextManager {
             const bn = path.basename(src);
             return !/^Singleton/i.test(bn) && !bn.endsWith('.lock') && !bn.endsWith('.tmp');
           },
-        } as any);
+        });
         log.success('  ✅ Clone complete');
       } else {
         log.info('  🧪 Using fresh isolated Chrome profile (no clone)');
@@ -388,10 +389,11 @@ export class SharedContextManager {
     if (!path.resolve(dir).startsWith(path.resolve(CONFIG.chromeInstancesDir))) return;
     // Best-effort: try removing typical lock files first, then the directory
     try {
-      await fs.promises.rm(dir, { recursive: true, force: true } as any);
+      await fs.promises.rm(dir, { recursive: true, force: true });
     } catch {
       // If rm is not available in older node, fallback to rmdir
       try {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- deprecated rmdir with recursive option
         await (fs.promises as any).rmdir(dir, { recursive: true });
       } catch {
         /* Ignore errors during fallback removal */

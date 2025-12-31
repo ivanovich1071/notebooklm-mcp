@@ -831,6 +831,7 @@ export class BrowserSession {
           if (await checkbox.isVisible({ timeout: 2000 })) {
             // Check if already selected
             const isChecked = await checkbox
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any -- DOM element in browser context
               .evaluate((el: any) => {
                 // Check various ways to determine if checked
                 const checkboxEl = el.querySelector('input[type="checkbox"]') || el;

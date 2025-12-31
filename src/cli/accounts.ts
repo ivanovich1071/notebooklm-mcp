@@ -224,7 +224,9 @@ async function setStrategy(strategy: string) {
   }
 
   const manager = await getAccountManager();
-  await manager.setRotationStrategy(strategy as any);
+  await manager.setRotationStrategy(
+    strategy as 'least_used' | 'round_robin' | 'failover' | 'random'
+  );
 }
 
 // Run CLI
