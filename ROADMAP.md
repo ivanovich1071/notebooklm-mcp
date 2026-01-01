@@ -10,25 +10,25 @@ This document tracks planned features, recent implementations, and future ideas 
 
 ### High Priority
 
-| Feature | Description |
-|---------|-------------|
+| Feature                      | Description                                                             |
+| ---------------------------- | ----------------------------------------------------------------------- |
 | **list-notebooks-from-nblm** | Scrape NotebookLM homepage to get real list of notebooks with IDs/names |
-| **/notebooks/:id/share** | API endpoint to share notebooks between accounts programmatically |
+| **/notebooks/:id/share**     | API endpoint to share notebooks between accounts programmatically       |
 
 ### Medium Priority
 
-| Feature | Description |
-|---------|-------------|
+| Feature                    | Description                                                  |
+| -------------------------- | ------------------------------------------------------------ |
 | **Cleanup test notebooks** | Delete unused notebooks in test accounts (100 limit reached) |
-| **Source Discovery** | Discover sources from Web/Drive (Fast/Deep modes) |
-| **Edit/Delete notes** | Complete notes CRUD operations |
+| **Source Discovery**       | Discover sources from Web/Drive (Fast/Deep modes)            |
+| **Edit/Delete notes**      | Complete notes CRUD operations                               |
 
 ### Low Priority
 
-| Feature | Description |
-|---------|-------------|
-| **Audio style selection** | Debate, Critique, Brief summary, Deep dive |
-| **Export formats** | PDF/DOCX for reports, PDF/PPTX for presentations, CSV/XLSX for tables |
+| Feature                   | Description                                                           |
+| ------------------------- | --------------------------------------------------------------------- |
+| **Audio style selection** | Debate, Critique, Brief summary, Deep dive                            |
+| **Export formats**        | PDF/DOCX for reports, PDF/PPTX for presentations, CSV/XLSX for tables |
 
 ---
 

@@ -12,10 +12,10 @@ NotebookLM MCP uses an i18n (internationalization) system to support multiple UI
 
 ## Current Supported Languages
 
-| Language | Code | File |
-|----------|------|------|
-| French | `fr` | `src/i18n/fr.json` |
-| English | `en` | `src/i18n/en.json` |
+| Language | Code | File               |
+| -------- | ---- | ------------------ |
+| French   | `fr` | `src/i18n/fr.json` |
+| English  | `en` | `src/i18n/en.json` |
 
 ## Adding a New Language
 
@@ -45,9 +45,9 @@ Edit the new file and translate all strings. The structure must match exactly:
 
   "buttons": {
     "addSource": "Quelle hinzufügen",
-    "addNote": "Notiz hinzufügen",
+    "addNote": "Notiz hinzufügen"
     // ... all other buttons
-  },
+  }
 
   // ... translate all sections
 }
@@ -72,11 +72,11 @@ Edit `src/i18n/index.ts` to add the new locale to the supported types:
 
 ```typescript
 // Line ~106
-export type SupportedLocale = 'fr' | 'en' | 'de';  // Add new code
+export type SupportedLocale = 'fr' | 'en' | 'de'; // Add new code
 
 // Line ~203-205
 export function getSupportedLocales(): SupportedLocale[] {
-  return ['fr', 'en', 'de'];  // Add new code
+  return ['fr', 'en', 'de']; // Add new code
 }
 ```
 
@@ -134,6 +134,7 @@ To find the correct translations for NotebookLM UI elements:
 4. **Take screenshots** for reference
 
 Common places to check:
+
 - Tab names (Sources, Chat/Discussion, Studio)
 - "Add source" button and menu
 - Content generation buttons in Studio
@@ -160,9 +161,7 @@ The i18n system includes a `SelectorBuilder` class that generates selectors for 
 import { selectors, tAll } from './i18n/index.js';
 
 // Build a selector that matches button text in all languages
-const addSourceSelectors = selectors()
-  .buttonWithText('addSource')
-  .build();
+const addSourceSelectors = selectors().buttonWithText('addSource').build();
 // Returns: ['button:has-text("Ajouter une source")', 'button:has-text("Add source")', ...]
 
 // Get translated text in all languages
