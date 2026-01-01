@@ -246,6 +246,56 @@ app.get('/notebooks/stats', async (_req: Request, res: Response) => {
   }
 });
 
+// Scrape notebooks from NotebookLM homepage (MUST be before /notebooks/:id to avoid being shadowed)
+app.get('/notebooks/scrape', async (req: Request, res: Response) => {
+  try {
+    const showBrowser = req.query.show_browser === 'true';
+
+    const result = await toolHandlers.handleListNotebooksFromNblm(
+      { show_browser: showBrowser },
+      async (message, progress, total) => {
+        log.info(`Progress: ${message} (${progress}/${total})`);
+      }
+    );
+
+    res.json(result);
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
+});
+
+// Bulk delete notebooks from NotebookLM (MUST be before /notebooks/:id)
+app.delete('/notebooks/bulk-delete', async (req: Request, res: Response) => {
+  try {
+    const { notebook_ids, show_browser } = req.body;
+
+    if (!notebook_ids || !Array.isArray(notebook_ids) || notebook_ids.length === 0) {
+      res.status(400).json({
+        success: false,
+        error: 'notebook_ids array is required',
+      });
+      return;
+    }
+
+    const result = await toolHandlers.handleDeleteNotebooksFromNblm(
+      { notebook_ids, show_browser: show_browser === true },
+      async (message, progress, total) => {
+        log.info(`Progress: ${message} (${progress}/${total})`);
+      }
+    );
+
+    res.json(result);
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
+});
+
 // Get notebook
 app.get('/notebooks/:id', async (req: Request, res: Response) => {
   try {
@@ -890,6 +940,7 @@ app.listen(PORT, HOST, () => {
   log.info('   POST   /notebooks/auto-discover Auto-discover notebook metadata');
   log.info('   GET    /notebooks/search       Search notebooks by query');
   log.info('   GET    /notebooks/stats        Get library statistics');
+  log.info('   GET    /notebooks/scrape       Scrape real notebooks from NotebookLM');
   log.info('   GET    /notebooks/:id          Get notebook details');
   log.info('   PUT    /notebooks/:id          Update notebook metadata');
   log.info('   DELETE /notebooks/:id          Delete a notebook');

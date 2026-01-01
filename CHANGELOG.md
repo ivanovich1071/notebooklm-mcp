@@ -7,6 +7,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.5.2] - 2026-01-01
+
+### Added
+
+**Notebook Scraping from NotebookLM:**
+
+- New `list_notebooks_from_nblm` tool to scrape real notebooks from NotebookLM homepage
+- Uses correct button selectors (`button[aria-labelledby*="project-"]`) matching NotebookLM's actual HTML structure
+- Returns notebook IDs, names, and URLs for all notebooks on the account
+
+**Bulk Notebook Deletion:**
+
+- New `delete_notebooks_from_nblm` tool for bulk notebook deletion
+- New `DELETE /notebooks/bulk-delete` HTTP endpoint for batch deletion
+- Support for protected notebook IDs that won't be deleted
+- Progress tracking during deletion operations
+
+### Fixed
+
+**Tool Description Builder:**
+
+- Fixed `TypeError: Cannot read properties of undefined (reading 'map')` in `buildAskQuestionDescription`
+- Added defensive checks with optional chaining for `active.topics` and `active.use_cases`
+- Fallback values when notebook metadata is incomplete
+
+---
+
 ## [1.5.1] - 2026-01-01
 
 ### Added

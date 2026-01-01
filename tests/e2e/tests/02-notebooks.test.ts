@@ -67,4 +67,32 @@ describe('02 - Notebook Library', () => {
 
     expect(result.success).toBe(true);
   });
+
+  it('[T11] Should scrape notebooks from NotebookLM', async () => {
+    // This test verifies the /notebooks/scrape endpoint works
+    // It will return real notebooks if authenticated, or empty array if not
+    const result = await httpRequest('/notebooks/scrape');
+
+    expect(result.success).toBe(true);
+    expect(result.data).toBeDefined();
+
+    const data = result.data as {
+      notebooks: Array<{ id: string; name: string; url: string }>;
+      total: number;
+      message: string;
+    };
+
+    expect(data.notebooks).toBeInstanceOf(Array);
+    expect(typeof data.total).toBe('number');
+    expect(data.total).toBe(data.notebooks.length);
+    expect(typeof data.message).toBe('string');
+
+    // If we have notebooks, verify their structure
+    if (data.notebooks.length > 0) {
+      const notebook = data.notebooks[0];
+      expect(notebook.id).toBeTruthy();
+      expect(notebook.name).toBeTruthy();
+      expect(notebook.url).toContain('notebooklm.google.com/notebook/');
+    }
+  });
 });

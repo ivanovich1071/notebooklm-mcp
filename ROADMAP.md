@@ -10,10 +10,9 @@ This document tracks planned features, recent implementations, and future ideas 
 
 ### High Priority
 
-| Feature                      | Description                                                             |
-| ---------------------------- | ----------------------------------------------------------------------- |
-| **list-notebooks-from-nblm** | Scrape NotebookLM homepage to get real list of notebooks with IDs/names |
-| **/notebooks/:id/share**     | API endpoint to share notebooks between accounts programmatically       |
+| Feature                  | Description                                                       |
+| ------------------------ | ----------------------------------------------------------------- |
+| **/notebooks/:id/share** | API endpoint to share notebooks between accounts programmatically |
 
 ### Medium Priority
 
@@ -61,6 +60,12 @@ This document tracks planned features, recent implementations, and future ideas 
 ---
 
 ## Recently Implemented
+
+### v1.5.2 - Notebook Discovery
+
+- [x] `list_notebooks_from_nblm` tool - Scrape NotebookLM homepage for real notebook list
+- [x] `GET /notebooks/scrape` endpoint with `?show_browser=true` option
+- [x] MCP and HTTP support for notebook discovery
 
 ### v1.5.1 - Multilingual UI Support
 

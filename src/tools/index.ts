@@ -69,8 +69,9 @@ function buildAskQuestionDescription(library: NotebookLibrary): string {
   const active = library.getActiveNotebook();
 
   if (active) {
-    const topics = active.topics.join(', ');
-    const useCases = active.use_cases.map((uc) => `  - ${uc}`).join('\n');
+    const topics = active.topics?.join(', ') || '';
+    const useCases =
+      active.use_cases?.map((uc) => `  - ${uc}`).join('\n') || '  - Research and exploration';
 
     return `# Conversational Research Partner (NotebookLM • Gemini 2.5 • Session RAG)
 
@@ -1096,6 +1097,33 @@ User: "Yes" → call remove_notebook`,
           },
         },
         required: ['note_title'],
+      },
+    },
+    // ========================================================================
+    // Browser Scraping Tools (Real NotebookLM Data)
+    // ========================================================================
+    {
+      name: 'list_notebooks_from_nblm',
+      description:
+        'Scrape the NotebookLM homepage to get a real list of all notebooks with their IDs and names.\n\n' +
+        'This tool navigates to notebooklm.google.com and extracts:\n' +
+        '- Notebook ID (UUID from URL)\n' +
+        '- Notebook name (displayed title)\n' +
+        '- Notebook URL\n\n' +
+        'Use this to:\n' +
+        '- Discover notebooks not yet in your library\n' +
+        '- Get accurate notebook IDs for automation\n' +
+        '- Verify which notebooks exist in your account\n' +
+        '- Find notebooks to delete when cleanup is needed\n\n' +
+        'Note: Requires authentication. Run setup_auth first if not authenticated.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          show_browser: {
+            type: 'boolean',
+            description: 'Show browser window during scraping. Default: false (headless).',
+          },
+        },
       },
     },
   ];
@@ -2868,6 +2896,368 @@ export class ToolHandlers {
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
       log.error(`❌ [TOOL] convert_note_to_source failed: ${errorMessage}`);
+      return {
+        success: false,
+        error: errorMessage,
+      };
+    }
+  }
+
+  /**
+   * Handle list_notebooks_from_nblm tool
+   *
+   * Scrapes the NotebookLM homepage to get a real list of all notebooks.
+   * This navigates to notebooklm.google.com and extracts notebook info from the page.
+   */
+  async handleListNotebooksFromNblm(
+    args: {
+      show_browser?: boolean;
+    },
+    sendProgress?: ProgressCallback
+  ): Promise<
+    ToolResult<{
+      notebooks: Array<{
+        id: string;
+        name: string;
+        url: string;
+      }>;
+      total: number;
+      message: string;
+    }>
+  > {
+    const { show_browser } = args;
+
+    await sendProgress?.('Scraping notebooks from NotebookLM...', 0, 5);
+    log.info(`🔧 [TOOL] list_notebooks_from_nblm called`);
+
+    try {
+      // Apply show_browser option
+      const originalHeadless = CONFIG.headless;
+      if (show_browser !== undefined) {
+        CONFIG.headless = !show_browser;
+      }
+
+      // Get shared context manager
+      const sharedContextManager = this.sessionManager.getSharedContextManager();
+      const context = await sharedContextManager.getOrCreateContext();
+      const page = await context.newPage();
+
+      try {
+        await sendProgress?.('Navigating to NotebookLM homepage...', 1, 5);
+        log.info('  📄 Navigating to NotebookLM homepage...');
+
+        // Navigate to NotebookLM homepage
+        await page.goto('https://notebooklm.google.com/', {
+          waitUntil: 'domcontentloaded',
+          timeout: 60000,
+        });
+
+        // Wait for the page to fully render and show notebook cards
+        // The homepage shows a grid of notebook cards with links
+        await sendProgress?.('Waiting for notebooks to load...', 2, 5);
+        log.info('  ⏳ Waiting for notebooks to appear...');
+
+        // Wait up to 30 seconds for notebook cards to appear
+        // NotebookLM uses buttons with aria-labelledby="project-{UUID}-title"
+        try {
+          await page.waitForSelector('button[aria-labelledby*="project-"]', { timeout: 30000 });
+        } catch {
+          log.warning('  ⚠️ No notebook links found after 30s wait');
+          // Debug: log current URL and page content
+          const currentUrl = page.url();
+          log.warning(`  🔍 Debug - Current URL: ${currentUrl}`);
+
+          // Check if we're on a login/redirect page
+          if (currentUrl.includes('accounts.google.com') || currentUrl.includes('signin')) {
+            log.warning('  ⚠️ Redirected to Google login page - cookies may have expired');
+          }
+
+          // Log all links on the page for debugging
+          const allLinks = await page.locator('a').all();
+          const linkSample = await Promise.all(
+            allLinks.slice(0, 10).map(async (l) => {
+              const href = await l.getAttribute('href');
+              const text = await l.textContent();
+              return `${href}: ${text?.substring(0, 50)}`;
+            })
+          );
+          log.warning(`  📋 First 10 links on page:\n    ${linkSample.join('\n    ')}`);
+
+          // Look for any elements that might contain notebook cards (divs, buttons, etc.)
+          const title = await page.title();
+          log.warning(`  📄 Page title: ${title}`);
+
+          // Check for elements with notebook-related data or classes
+          const notebookElements = await page
+            .locator(
+              '[data-id], [data-notebook-id], [class*="notebook"], [class*="card"], [role="listitem"]'
+            )
+            .all();
+          log.warning(
+            `  🔍 Found ${notebookElements.length} potential notebook elements (cards/divs)`
+          );
+
+          // Get page content to look for notebook patterns
+          const bodyContent = await page.content();
+          const notebookMatches = bodyContent.match(/notebook\/[a-f0-9-]+/g);
+          log.warning(
+            `  🔍 Notebook IDs in HTML: ${notebookMatches?.slice(0, 5).join(', ') || 'None found'}`
+          );
+
+          // Take screenshot for debugging
+          await page.screenshot({ path: 'debug-homepage.png', fullPage: true });
+          log.warning('  📸 Screenshot saved to debug-homepage.png');
+        }
+        await randomDelay(2000, 3000);
+
+        await sendProgress?.('Extracting notebook list...', 3, 5);
+        log.info('  🔍 Looking for notebook cards...');
+
+        const notebooks: Array<{ id: string; name: string; url: string }> = [];
+        const seenIds = new Set<string>();
+
+        // Strategy 1: Find notebook buttons with aria-labelledby="project-{UUID}-title"
+        const notebookButtons = await page.locator('button[aria-labelledby*="project-"]').all();
+        log.info(`  📋 Found ${notebookButtons.length} notebook buttons`);
+
+        for (const button of notebookButtons) {
+          try {
+            const ariaLabelledBy = await button.getAttribute('aria-labelledby');
+            if (!ariaLabelledBy) continue;
+
+            // Extract UUID from aria-labelledby (format: "project-{UUID}-title project-{UUID}-emoji")
+            const idMatch = ariaLabelledBy.match(/project-([a-f0-9-]{36})/);
+            if (!idMatch) continue;
+
+            const id = idMatch[1];
+            if (seenIds.has(id)) continue;
+            seenIds.add(id);
+
+            // Get notebook name from the title element
+            let name = 'Untitled';
+            const titleElementId = `project-${id}-title`;
+            // UUID format doesn't need escaping, but we use attribute selector to be safe
+            const titleElement = page.locator(`[id="${titleElementId}"]`);
+            if ((await titleElement.count()) > 0) {
+              const titleText = await titleElement.textContent();
+              if (titleText && titleText.trim()) {
+                name = titleText.trim();
+              }
+            }
+
+            const url = `https://notebooklm.google.com/notebook/${id}`;
+            notebooks.push({ id, name, url });
+            log.info(`    📓 Found: ${name} (${id.substring(0, 8)}...)`);
+          } catch (e) {
+            log.warning(`    ⚠️ Could not extract notebook info: ${e}`);
+          }
+        }
+
+        // Strategy 2: Fallback - parse HTML for notebook IDs
+        if (notebooks.length === 0) {
+          log.info('  📚 Fallback: Parsing HTML for notebook IDs...');
+          const pageContent = await page.content();
+          const notebookIdMatches = pageContent.match(
+            /project-([a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12})/g
+          );
+
+          if (notebookIdMatches) {
+            for (const match of notebookIdMatches) {
+              const id = match.replace('project-', '');
+              if (!seenIds.has(id)) {
+                seenIds.add(id);
+                const url = `https://notebooklm.google.com/notebook/${id}`;
+                notebooks.push({ id, name: `Notebook`, url });
+                log.info(`    📓 Found from HTML: ${id.substring(0, 8)}...`);
+              }
+            }
+          }
+        }
+
+        await sendProgress?.('Done!', 5, 5);
+        log.success(`  ✅ Found ${notebooks.length} notebooks`);
+
+        // Restore headless config
+        CONFIG.headless = originalHeadless;
+
+        return {
+          success: true,
+          data: {
+            notebooks,
+            total: notebooks.length,
+            message: `Found ${notebooks.length} notebooks in NotebookLM account`,
+          },
+        };
+      } finally {
+        // Close the page we created (but keep the context)
+        await page.close();
+      }
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      log.error(`❌ [TOOL] list_notebooks_from_nblm failed: ${errorMessage}`);
+      return {
+        success: false,
+        error: errorMessage,
+      };
+    }
+  }
+
+  /**
+   * Handle delete_notebooks_from_nblm tool
+   *
+   * Deletes notebooks from NotebookLM via browser automation.
+   * Navigates to homepage, finds each notebook card, and deletes it.
+   */
+  async handleDeleteNotebooksFromNblm(
+    args: {
+      notebook_ids: string[];
+      show_browser?: boolean;
+    },
+    sendProgress?: ProgressCallback
+  ): Promise<
+    ToolResult<{
+      deleted: string[];
+      failed: string[];
+      message: string;
+    }>
+  > {
+    const { notebook_ids, show_browser } = args;
+
+    log.info(`🔧 [TOOL] delete_notebooks_from_nblm called`);
+    log.info(`  📋 Notebooks to delete: ${notebook_ids.length}`);
+
+    const deleted: string[] = [];
+    const failed: string[] = [];
+
+    try {
+      // Apply show_browser option
+      const originalHeadless = CONFIG.headless;
+      if (show_browser !== undefined) {
+        CONFIG.headless = !show_browser;
+      }
+
+      const sharedContextManager = this.sessionManager.getSharedContextManager();
+      const context = await sharedContextManager.getOrCreateContext();
+      const page = await context.newPage();
+
+      try {
+        for (let i = 0; i < notebook_ids.length; i++) {
+          const notebookId = notebook_ids[i];
+          await sendProgress?.(
+            `Deleting notebook ${i + 1}/${notebook_ids.length}...`,
+            i,
+            notebook_ids.length
+          );
+          log.info(
+            `  🗑️ Deleting notebook ${i + 1}/${notebook_ids.length}: ${notebookId.substring(0, 8)}...`
+          );
+
+          try {
+            // Navigate to homepage
+            await page.goto('https://notebooklm.google.com/', {
+              waitUntil: 'domcontentloaded',
+              timeout: 30000,
+            });
+
+            // Wait for notebook cards to load
+            await page.waitForSelector('button[aria-labelledby*="project-"]', { timeout: 15000 });
+            await randomDelay(1000, 2000);
+
+            // Find the notebook card by its project ID in aria-labelledby
+            const cardSelector = `button[aria-labelledby*="project-${notebookId}"]`;
+            const card = page.locator(cardSelector);
+
+            if ((await card.count()) === 0) {
+              log.warning(`    ⚠️ Notebook not found: ${notebookId}`);
+              failed.push(notebookId);
+              continue;
+            }
+
+            // Find the menu button (3-dot) for this card
+            // It's usually a sibling button with aria-label containing "menu" or "options"
+            const cardContainer = card.locator('..'); // Parent element
+            const menuButton = cardContainer
+              .locator(
+                'button[aria-label*="menu"], button[aria-label*="options"], button[aria-label*="Plus"], [class*="menu"]'
+              )
+              .first();
+
+            if ((await menuButton.count()) === 0) {
+              // Try finding any button with 3 dots icon nearby
+              const anyMenuButton = cardContainer
+                .locator('button:has(mat-icon), button[class*="more"]')
+                .first();
+              if ((await anyMenuButton.count()) > 0) {
+                await anyMenuButton.click();
+              } else {
+                log.warning(`    ⚠️ Menu button not found for: ${notebookId}`);
+                failed.push(notebookId);
+                continue;
+              }
+            } else {
+              await menuButton.click();
+            }
+
+            await randomDelay(500, 1000);
+
+            // Click delete option in the menu
+            const deleteButton = page
+              .locator(
+                'button:has-text("Supprimer"), button:has-text("Delete"), [role="menuitem"]:has-text("Supprimer"), [role="menuitem"]:has-text("Delete")'
+              )
+              .first();
+
+            if ((await deleteButton.count()) === 0) {
+              log.warning(`    ⚠️ Delete button not found for: ${notebookId}`);
+              // Close menu by pressing Escape
+              await page.keyboard.press('Escape');
+              failed.push(notebookId);
+              continue;
+            }
+
+            await deleteButton.click();
+            await randomDelay(500, 1000);
+
+            // Confirm deletion if a dialog appears
+            const confirmButton = page
+              .locator(
+                'button:has-text("Supprimer"), button:has-text("Delete"), button:has-text("Confirmer"), button:has-text("Confirm")'
+              )
+              .first();
+            if ((await confirmButton.count()) > 0) {
+              await confirmButton.click();
+            }
+
+            await randomDelay(1000, 2000);
+
+            deleted.push(notebookId);
+            log.success(`    ✅ Deleted: ${notebookId.substring(0, 8)}...`);
+          } catch (e) {
+            const errMsg = e instanceof Error ? e.message : String(e);
+            log.warning(`    ⚠️ Failed to delete ${notebookId}: ${errMsg}`);
+            failed.push(notebookId);
+          }
+        }
+
+        await sendProgress?.('Done!', notebook_ids.length, notebook_ids.length);
+        log.success(`  ✅ Deletion complete: ${deleted.length} deleted, ${failed.length} failed`);
+
+        CONFIG.headless = originalHeadless;
+
+        return {
+          success: true,
+          data: {
+            deleted,
+            failed,
+            message: `Deleted ${deleted.length} notebooks, ${failed.length} failed`,
+          },
+        };
+      } finally {
+        await page.close();
+      }
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      log.error(`❌ [TOOL] delete_notebooks_from_nblm failed: ${errorMessage}`);
       return {
         success: false,
         error: errorMessage,

@@ -157,6 +157,17 @@ function buildProxyToolDefinitions(): Tool[] {
       },
     },
     {
+      name: 'list_notebooks_from_nblm',
+      description:
+        '🔌 [PROXY] Scrape NotebookLM homepage to get real notebook list via HTTP server',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          show_browser: { type: 'boolean', description: 'Show browser window' },
+        },
+      },
+    },
+    {
       name: 'select_notebook',
       description: '🔌 [PROXY] Set active notebook via HTTP server',
       inputSchema: {
@@ -414,6 +425,11 @@ async function handleToolCall(
 
       case 'get_library_stats':
         return await httpRequest('GET', '/notebooks/stats');
+
+      case 'list_notebooks_from_nblm': {
+        const showBrowser = args.show_browser ? '?show_browser=true' : '';
+        return await httpRequest('GET', `/notebooks/scrape${showBrowser}`);
+      }
 
       // Session endpoints
       case 'list_sessions':
