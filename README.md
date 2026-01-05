@@ -112,6 +112,21 @@ curl -X POST http://localhost:3000/ask \
   -d '{"question": "Explain X", "notebook_id": "my-notebook"}'
 ```
 
+### Option 3: Docker (NAS, Server)
+
+```bash
+# Build and run
+docker build -t notebooklm-mcp .
+docker run -d --name notebooklm-mcp -p 3000:3000 -p 6080:6080 -v notebooklm-data:/data notebooklm-mcp
+
+# Authenticate via noVNC
+# 1. Open http://localhost:6080/vnc.html
+# 2. Run: curl -X POST http://localhost:3000/setup-auth -d '{"show_browser":true}'
+# 3. Login to Google in the VNC window
+```
+
+See [Docker Guide](./deployment/docs/08-DOCKER.md) for NAS deployment (Synology, QNAP).
+
 ---
 
 ## Documentation
@@ -138,6 +153,7 @@ See [ROADMAP.md](./ROADMAP.md) for planned features and version history.
 
 **Latest releases:**
 
+- **v1.5.3** — Docker deployment with noVNC for visual authentication + NAS support (Synology, QNAP)
 - **v1.5.2** — Notebook scraping from NotebookLM + Bulk delete + Bug fixes
 - **v1.5.1** — Multilingual UI support (FR/EN) with i18n selector system + E2E tests (76 tests)
 - **v1.5.0** — Complete Studio content generation (video, infographic, presentation, data_table) + Notes management + Delete sources
