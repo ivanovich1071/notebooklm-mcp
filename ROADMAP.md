@@ -16,11 +16,14 @@ This document tracks planned features, recent implementations, and future ideas 
 
 ### Medium Priority
 
-| Feature                    | Description                                                  |
-| -------------------------- | ------------------------------------------------------------ |
-| **Cleanup test notebooks** | Delete unused notebooks in test accounts (100 limit reached) |
-| **Source Discovery**       | Discover sources from Web/Drive (Fast/Deep modes)            |
-| **Edit/Delete notes**      | Complete notes CRUD operations                               |
+| Feature                           | Description                                                     |
+| --------------------------------- | --------------------------------------------------------------- |
+| **Scrape: reset to My Notebooks** | Navigate to "My Notebooks" before scraping (not shared view)    |
+| **Scrape after auth**             | Option to auto-scrape notebooks after successful authentication |
+| **Persist scraped notebooks**     | Keep scraped notebooks across re-authentication                 |
+| **Cleanup test notebooks**        | Delete unused notebooks in test accounts (100 limit reached)    |
+| **Source Discovery**              | Discover sources from Web/Drive (Fast/Deep modes)               |
+| **Edit/Delete notes**             | Complete notes CRUD operations                                  |
 
 ### Low Priority
 
