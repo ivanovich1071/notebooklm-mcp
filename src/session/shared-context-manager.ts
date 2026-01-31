@@ -17,6 +17,7 @@ import { chromium } from 'patchright';
 import { CONFIG } from '../config.js';
 import { log } from '../utils/logger.js';
 import { AuthManager } from '../auth/auth-manager.js';
+import { getAccountManager } from '../accounts/account-manager.js';
 import fs from 'fs';
 import path from 'path';
 
@@ -132,8 +133,27 @@ export class SharedContextManager {
       }
     }
 
-    // Check for saved auth
-    const statePath = await this.authManager.getValidStatePath();
+    // Check for saved auth - prefer account-specific state file
+    let statePath: string | null = null;
+    try {
+      const accountManager = await getAccountManager();
+      const currentAccountId = await accountManager.getCurrentAccountId();
+      if (currentAccountId) {
+        const account = accountManager.getAccount(currentAccountId);
+        if (account && fs.existsSync(account.stateFilePath)) {
+          statePath = account.stateFilePath;
+          log.success(`  📂 Found account auth state: ${statePath}`);
+        }
+      }
+    } catch {
+      // Fall back to legacy global AuthManager path
+      statePath = await this.authManager.getValidStatePath();
+    }
+
+    // If no account-specific state, try legacy path
+    if (!statePath) {
+      statePath = await this.authManager.getValidStatePath();
+    }
 
     if (statePath) {
       log.success(`  📂 Found auth state: ${statePath}`);

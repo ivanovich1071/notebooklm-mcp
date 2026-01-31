@@ -201,24 +201,45 @@ export class AutoLoginManager {
         throw new Error(passwordResult.error || 'Password step failed');
       }
 
-      // Check for 2FA
+      // Check for 2FA or verification challenge
       const currentUrl = page.url();
-      if (currentUrl.includes('challenge')) {
-        if (credentials.totpSecret) {
-          log.info('  🔑 Handling 2FA with TOTP...');
-          const totpResult = await this.handle2FA(page, credentials.totpSecret, deadline);
-          if (!totpResult.success) {
-            throw new Error(totpResult.error || '2FA failed');
-          }
-        } else {
-          log.warning('  ⚠️  2FA required but no TOTP secret configured');
+      const needsManualAuth =
+        currentUrl.includes('challenge') ||
+        currentUrl.includes('signin/rejected') ||
+        currentUrl.includes('v3/signin') ||
+        currentUrl.includes('AccountChooser');
+
+      if (needsManualAuth && !credentials.totpSecret) {
+        // Manual intervention required - wait for user to complete login
+        log.warning('  ⚠️  Manual authentication required');
+        log.info('  👤 Please complete the login in the browser window...');
+        log.info(`  ⏰ Waiting up to ${Math.round((deadline - Date.now()) / 1000)}s...`);
+
+        // Wait for user to complete login and reach NotebookLM
+        const manualSuccess = await this.waitForNotebookLM(page, deadline);
+
+        if (manualSuccess) {
+          log.success('  ✅ Manual authentication completed!');
+          await this.saveState(context, page, account);
+          await this.accountManager.recordLoginSuccess(accountId);
+          await context.close();
           return {
-            success: false,
+            success: true,
             accountId,
-            error: '2FA required - no TOTP secret',
             duration: Date.now() - startTime,
             requiresManualIntervention: true,
           };
+        } else {
+          throw new Error('Manual authentication timed out or was cancelled');
+        }
+      }
+
+      // Handle automatic 2FA with TOTP
+      if (currentUrl.includes('challenge') && credentials.totpSecret) {
+        log.info('  🔑 Handling 2FA with TOTP...');
+        const totpResult = await this.handle2FA(page, credentials.totpSecret, deadline);
+        if (!totpResult.success) {
+          throw new Error(totpResult.error || '2FA failed');
         }
       }
 
@@ -227,18 +248,6 @@ export class AutoLoginManager {
       const redirectSuccess = await this.waitForNotebookLM(page, deadline);
 
       if (!redirectSuccess) {
-        // Check if we're on a challenge page
-        const url = page.url();
-        if (url.includes('challenge') || url.includes('signin/rejected')) {
-          log.error('  ❌ Google requires additional verification');
-          return {
-            success: false,
-            accountId,
-            error: 'Google verification required',
-            duration: Date.now() - startTime,
-            requiresManualIntervention: true,
-          };
-        }
         throw new Error('Redirect to NotebookLM timed out');
       }
 

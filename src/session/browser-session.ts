@@ -14,8 +14,10 @@
  */
 
 import type { BrowserContext, Page } from 'patchright';
+import { existsSync } from 'fs';
 import { SharedContextManager } from './shared-context-manager.js';
 import { AuthManager } from '../auth/auth-manager.js';
+import { getAccountManager } from '../accounts/account-manager.js';
 import { humanType, randomDelay } from '../utils/stealth-utils.js';
 import {
   waitForLatestAnswer,
@@ -309,8 +311,25 @@ export class BrowserSession {
 
     log.warning(`  ⚠️  Cookies expired or invalid`);
 
-    // Try to get valid auth state
-    const statePath = await this.authManager.getValidStatePath();
+    // Try to get valid auth state - prefer account-specific path
+    let statePath: string | null = null;
+    try {
+      const accountManager = await getAccountManager();
+      const currentAccountId = await accountManager.getCurrentAccountId();
+      if (currentAccountId) {
+        const account = accountManager.getAccount(currentAccountId);
+        if (account && existsSync(account.stateFilePath)) {
+          statePath = account.stateFilePath;
+        }
+      }
+    } catch {
+      // Fall back to legacy path
+    }
+
+    // If no account-specific state, try legacy path
+    if (!statePath) {
+      statePath = await this.authManager.getValidStatePath();
+    }
 
     if (statePath) {
       // Load saved state

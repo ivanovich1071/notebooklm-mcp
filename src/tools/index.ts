@@ -1615,14 +1615,62 @@ export class ToolHandlers {
       auto_login_enabled: boolean;
       stealth_enabled: boolean;
       troubleshooting_tip?: string;
+      current_account?: string;
     }>
   > {
     log.info(`🔧 [TOOL] get_health called`);
 
     try {
-      // Check authentication status
-      const statePath = await this.authManager.getValidStatePath();
-      const authenticated = statePath !== null;
+      // Check authentication status using account-specific state file
+      let authenticated = false;
+      let currentAccountEmail: string | undefined;
+
+      let accountCheckDone = false;
+      try {
+        const accountManager = await getAccountManager();
+        const currentAccountId = await accountManager.getCurrentAccountId();
+
+        if (currentAccountId) {
+          const account = accountManager.getAccount(currentAccountId);
+          if (account) {
+            currentAccountEmail = account.config.email;
+            accountCheckDone = true; // Mark that we found an account
+            // Check account-specific state file
+            if (fs.existsSync(account.stateFilePath)) {
+              try {
+                const stateData = fs.readFileSync(account.stateFilePath, 'utf-8');
+                const state = JSON.parse(stateData);
+                if (state.cookies && state.cookies.length > 0) {
+                  // Check for critical auth cookies
+                  const criticalCookieNames = ['SID', 'HSID', 'SSID', 'APISID', 'SAPISID'];
+                  const criticalCookies = state.cookies.filter((c: { name: string }) =>
+                    criticalCookieNames.includes(c.name)
+                  );
+                  if (criticalCookies.length > 0) {
+                    // Check expiration
+                    const currentTime = Date.now() / 1000;
+                    const hasExpired = criticalCookies.some((c: { expires?: number }) => {
+                      const expires = c.expires ?? -1;
+                      return expires !== -1 && expires < currentTime;
+                    });
+                    authenticated = !hasExpired;
+                  }
+                }
+              } catch {
+                // Invalid state file
+              }
+            }
+          }
+        }
+      } catch {
+        // AccountManager failed, will use fallback
+      }
+
+      // Fall back to legacy global AuthManager path if no account was found
+      if (!accountCheckDone) {
+        const statePath = await this.authManager.getValidStatePath();
+        authenticated = statePath !== null;
+      }
 
       // Get session stats
       const stats = this.sessionManager.getStats();
@@ -1638,6 +1686,8 @@ export class ToolHandlers {
         headless: CONFIG.headless,
         auto_login_enabled: CONFIG.autoLoginEnabled,
         stealth_enabled: CONFIG.stealthEnabled,
+        // Include current account if available
+        ...(currentAccountEmail && { current_account: currentAccountEmail }),
         // Add troubleshooting tip if not authenticated
         ...(!authenticated && {
           troubleshooting_tip:

@@ -251,6 +251,7 @@ export class StartupManager {
 
   /**
    * Verify authentication for a specific account
+   * Uses account-specific state file path, not global AuthManager path
    */
   private async verifyAndConnectAccount(
     accountId: string
@@ -264,22 +265,54 @@ export class StartupManager {
       return { authenticated: false, needsReauth: false, error: 'Account not found' };
     }
 
-    // Check if state file exists
-    const statePath = await this.authManager.getValidStatePath();
+    // Check account-specific state file (NOT the global AuthManager path)
+    const accountStatePath = account.stateFilePath;
+    const fs = await import('fs/promises');
+    const { existsSync } = await import('fs');
 
-    if (!statePath) {
-      // Check if cookies are specifically expired vs never authenticated
-      const hasState = await this.authManager.hasSavedState();
-      if (hasState) {
-        log.warning('  ⚠️  Cookies expired or invalid');
-        return { authenticated: false, needsReauth: true };
-      }
+    if (!existsSync(accountStatePath)) {
       log.warning('  ⚠️  No authentication state found');
+      log.dim(`     Expected: ${accountStatePath}`);
       return { authenticated: false, needsReauth: true };
     }
 
-    log.success('  ✅ Authentication valid');
-    return { authenticated: true, needsReauth: false };
+    // Validate cookies in the account state file
+    try {
+      const stateData = await fs.readFile(accountStatePath, 'utf-8');
+      const state = JSON.parse(stateData);
+
+      if (!state.cookies || state.cookies.length === 0) {
+        log.warning('  ⚠️  No cookies in state file');
+        return { authenticated: false, needsReauth: true };
+      }
+
+      // Check for critical Google auth cookies
+      const criticalCookieNames = ['SID', 'HSID', 'SSID', 'APISID', 'SAPISID'];
+      const criticalCookies = state.cookies.filter((c: { name: string }) =>
+        criticalCookieNames.includes(c.name)
+      );
+
+      if (criticalCookies.length === 0) {
+        log.warning('  ⚠️  No critical auth cookies found');
+        return { authenticated: false, needsReauth: true };
+      }
+
+      // Check cookie expiration
+      const currentTime = Date.now() / 1000;
+      for (const cookie of criticalCookies) {
+        const expires = cookie.expires ?? -1;
+        if (expires !== -1 && expires < currentTime) {
+          log.warning(`  ⚠️  Cookie '${cookie.name}' has expired`);
+          return { authenticated: false, needsReauth: true };
+        }
+      }
+
+      log.success(`  ✅ Authentication valid (${criticalCookies.length} critical cookies)`);
+      return { authenticated: true, needsReauth: false };
+    } catch (error) {
+      log.warning(`  ⚠️  Failed to validate state file: ${error}`);
+      return { authenticated: false, needsReauth: true };
+    }
   }
 
   /**
@@ -301,15 +334,19 @@ export class StartupManager {
     try {
       // Use the AutoLoginManager for auto-login
       const autoLoginManager = new AutoLoginManager(this.accountManager);
+
+      // Always use visible browser for re-authentication
+      // Headless auth doesn't work with Google (2FA, captcha, etc.)
+      log.info('  🌐 Opening browser for authentication...');
       const result = await autoLoginManager.performAutoLogin(accountId, {
-        showBrowser: false,
-        timeout: CONFIG.autoLoginTimeoutMs,
+        showBrowser: true,
+        timeout: CONFIG.autoLoginTimeoutMs * 2, // Give time for manual login
       });
 
       if (result.success) {
         return { success: true };
       }
-      return { success: false, error: result.error || 'Auto-login failed' };
+      return { success: false, error: result.error || 'Authentication failed or cancelled' };
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : String(error);
       return { success: false, error: errorMsg };
