@@ -7,6 +7,42 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.5.5] - 2026-01-31
+
+### Fixed
+
+**Authentication State Path Mismatch (Critical Bug):**
+
+- Fixed `/health` endpoint and session recovery checking wrong path for authentication cookies
+- **Root cause:** Multi-account system saves cookies to `accounts/{id}/browser_state/state.json` but code was checking legacy global path `CONFIG.browserStateDir/state.json`
+- Fixed in 4 files:
+  - `src/startup/startup-manager.ts` - Now uses account-specific state path at startup
+  - `src/tools/index.ts` - Health endpoint checks account-specific state with fallback
+  - `src/session/shared-context-manager.ts` - Context recreation loads from correct path
+  - `src/session/browser-session.ts` - Session recovery uses account-specific state
+- All files maintain fallback to legacy AuthManager path for backward compatibility
+
+**Health Endpoint Improvements:**
+
+- Added `current_account` field to health response showing active account email
+- Added `accountCheckDone` flag to ensure proper fallback to AuthManager in tests
+
+### Added
+
+**Windows Startup Scripts:**
+
+- `scripts/start-server-hidden.vbs` - VBScript to launch HTTP server silently at Windows startup
+- `scripts/stop-server.bat` - Batch script to stop running server processes
+- `scripts/mcp-proxy-hidden.ps1` - PowerShell script for hidden window MCP proxy
+
+**Claude Code MCP Integration:**
+
+- Hidden window configuration for MCP stdio proxy in Claude Code projects
+- Uses `powershell -WindowStyle Hidden` to avoid shell window popup on each tool call
+- Example `.mcp.json` configuration in documentation
+
+---
+
 ## [1.5.4] - 2026-01-07
 
 ### Fixed

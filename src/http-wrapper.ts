@@ -98,8 +98,6 @@ app.post('/ask', async (req: Request, res: Response) => {
       });
     }
 
-    log.info(`[${reqId}] /ask - "${question.substring(0, 50)}..."`);
-
     const result = await toolHandlers.handleAskQuestion(
       { question, session_id, notebook_id, notebook_url, show_browser, source_format },
       async (message, progress, total) => {
