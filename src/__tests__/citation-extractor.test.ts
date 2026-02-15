@@ -505,7 +505,7 @@ describe('citation-extractor', () => {
     });
 
     describe('with container element', () => {
-      it('should search within container when provided', async () => {
+      it('should use page.evaluate even when container is provided (container is ignored)', async () => {
         const mockPage = createMockPage();
         const mockContainer = {
           $$: jest.fn().mockResolvedValue([]),
@@ -514,8 +514,9 @@ describe('citation-extractor', () => {
 
         await extractCitations(mockPage as any, 'Test answer', mockContainer as any, 'inline');
 
-        // Container's $$ should be called, not page's
-        expect(mockContainer.$$).toHaveBeenCalled();
+        // New implementation uses page.evaluate() for everything — container is ignored
+        expect(mockPage.evaluate).toHaveBeenCalled();
+        expect(mockContainer.$$).not.toHaveBeenCalled();
       });
     });
 
