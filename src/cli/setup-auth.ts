@@ -18,19 +18,27 @@ async function main() {
   console.log('==========================================');
   console.log('');
 
+  const args = process.argv.slice(2);
+  const forceReauth = args.includes('--force') || args.includes('-f');
+
   const authManager = new AuthManager();
 
   try {
-    // Check if already authenticated
-    const existingAuth = await authManager.getValidStatePath();
+    // Check if already authenticated (skip check with --force)
+    if (!forceReauth) {
+      const existingAuth = await authManager.getValidStatePath();
 
-    if (existingAuth) {
-      log.success('Already authenticated!');
+      if (existingAuth) {
+        log.success('Already authenticated!');
+        log.info('');
+        log.info('Your Google session is valid (locally).');
+        log.info('If Google expired your session server-side, use: npm run setup-auth -- --force');
+        log.info('');
+        process.exit(0);
+      }
+    } else {
+      log.warning('Force mode: bypassing local cookie check');
       log.info('');
-      log.info('Your Google session is valid.');
-      log.info("Use 'npm run re-auth' to switch accounts or re-authenticate.");
-      log.info('');
-      process.exit(0);
     }
 
     log.info('Starting interactive authentication...');
@@ -52,7 +60,8 @@ async function main() {
           log.info(`  ${message}`);
         }
       },
-      true // show_browser = true
+      true, // show_browser = true
+      forceReauth
     );
 
     console.log('');

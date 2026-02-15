@@ -37,42 +37,72 @@ import {
 // HTTP server URL (configurable via environment)
 const HTTP_BASE_URL = process.env.MCP_HTTP_URL || 'http://localhost:3000';
 
+// Default timeout for HTTP requests (5 minutes)
+const HTTP_REQUEST_TIMEOUT_MS = parseInt(process.env.MCP_HTTP_TIMEOUT || '300000', 10);
+
 /**
  * Helper to make HTTP requests to the backend server
  */
 async function httpRequest<T>(
   method: 'GET' | 'POST' | 'PUT' | 'DELETE',
   endpoint: string,
-  body?: unknown
+  body?: unknown,
+  timeoutMs: number = HTTP_REQUEST_TIMEOUT_MS
 ): Promise<T> {
   const url = `${HTTP_BASE_URL}${endpoint}`;
+
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
   const options: RequestInit = {
     method,
     headers: {
       'Content-Type': 'application/json',
     },
+    signal: controller.signal,
   };
 
   if (body && (method === 'POST' || method === 'PUT')) {
     options.body = JSON.stringify(body);
   }
 
-  const response = await fetch(url, options);
+  try {
+    const response = await fetch(url, options);
 
-  if (!response.ok) {
-    const errorText = await response.text();
-    throw new Error(`HTTP ${response.status}: ${errorText}`);
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`HTTP ${response.status}: ${errorText}`);
+    }
+
+    return response.json() as Promise<T>;
+  } catch (error) {
+    if (error instanceof Error && error.name === 'AbortError') {
+      throw new Error(`Request timeout after ${timeoutMs / 1000}s for ${method} ${endpoint}`);
+    }
+    throw error;
+  } finally {
+    clearTimeout(timeoutId);
   }
-
-  return response.json() as Promise<T>;
 }
+
+import { appendFileSync } from 'fs';
+
+const DEBUG_LOG = process.env.MCP_DEBUG_LOG || '';
 
 /**
  * Log to stderr (stdio uses stdout for MCP protocol)
+ * Also writes to debug log file if MCP_DEBUG_LOG is set
  */
 function log(message: string): void {
-  console.error(`[stdio-proxy] ${message}`);
+  const line = `[stdio-proxy] ${message}`;
+  console.error(line);
+  if (DEBUG_LOG) {
+    try {
+      appendFileSync(DEBUG_LOG, `${new Date().toISOString()} ${line}\n`);
+    } catch {
+      /* ignore */
+    }
+  }
 }
 
 /**
@@ -624,16 +654,69 @@ class StdioHttpProxyServer {
       const { name, arguments: args } = request.params;
       log(`🔧 Tool call: ${name}`);
 
-      const result = await handleToolCall(name, (args || {}) as Record<string, unknown>);
+      // Extract progress token from client request (if provided)
+      const meta = (request.params as Record<string, unknown>)._meta as
+        | { progressToken?: string | number }
+        | undefined;
+      const progressToken = meta?.progressToken;
 
-      return {
-        content: [
-          {
-            type: 'text',
-            text: JSON.stringify(result, null, 2),
-          },
-        ],
-      };
+      // Tools that can take a long time (browser interactions)
+      const longRunningTools = new Set([
+        'ask_question',
+        'setup_auth',
+        're_auth',
+        'generate_audio',
+        'generate_content',
+        'add_source',
+        'list_content',
+        'list_notebooks_from_nblm',
+        'auto_discover_notebook',
+      ]);
+
+      // Send periodic progress notifications to prevent MCP client timeout (60s default)
+      let progressInterval: ReturnType<typeof setInterval> | undefined;
+      let elapsed = 0;
+      const PROGRESS_INTERVAL_MS = 15_000; // every 15 seconds
+
+      if (longRunningTools.has(name)) {
+        progressInterval = setInterval(() => {
+          elapsed += PROGRESS_INTERVAL_MS / 1000;
+          log(`  ⏳ ${name}: waiting... (${elapsed}s)`);
+
+          if (progressToken !== undefined) {
+            // Send progress notification with client's token to reset timeout
+            this.server
+              .notification({
+                method: 'notifications/progress',
+                params: {
+                  progressToken,
+                  progress: elapsed,
+                  total: 300,
+                },
+              })
+              .catch(() => {
+                /* ignore notification errors */
+              });
+          }
+        }, PROGRESS_INTERVAL_MS);
+      }
+
+      try {
+        const result = await handleToolCall(name, (args || {}) as Record<string, unknown>);
+
+        return {
+          content: [
+            {
+              type: 'text',
+              text: JSON.stringify(result, null, 2),
+            },
+          ],
+        };
+      } finally {
+        if (progressInterval) {
+          clearInterval(progressInterval);
+        }
+      }
     });
   }
 

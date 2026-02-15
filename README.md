@@ -23,8 +23,8 @@
 ### Q&A with Citations
 
 - **Ask questions** to NotebookLM and get accurate, citation-backed answers
-- **Source citation extraction** with 5 formats: none, inline, footnotes, json, expanded
-- **Session management** for multi-turn conversations
+- **Source citation extraction** with 5 formats: none, inline, footnotes, json, expanded (97% excerpt success rate)
+- **Session management** for multi-turn conversations with auto-reauth on session expiry
 
 ### Content Generation
 

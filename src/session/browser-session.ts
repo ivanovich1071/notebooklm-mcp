@@ -123,13 +123,48 @@ export class BrowserSession {
       await randomDelay(2000, 3000);
 
       // Check if we need to login
-      const isAuthenticated = await this.authManager.validateCookiesExpiry(this.context);
+      // IMPORTANT: Check actual URL first — Google can expire sessions server-side
+      // even when local cookies still have valid expiry dates
+      const postNavUrl = this.page.url();
+      const isOnGoogleSignIn = postNavUrl.includes('accounts.google.com');
+      if (isOnGoogleSignIn) {
+        log.warning(`  ⚠️ Redirected to Google sign-in — server-side session expired`);
+      }
+      const isAuthenticated = isOnGoogleSignIn
+        ? false
+        : await this.authManager.validateCookiesExpiry(this.context);
 
       if (!isAuthenticated) {
         log.warning(`  🔑 Session ${this.sessionId} needs authentication`);
         const loginSuccess = await this.ensureAuthenticated();
         if (!loginSuccess) {
-          throw new Error('Failed to authenticate session');
+          throw new Error(
+            'Google session expired and re-authentication failed.\n' +
+              'Please re-authenticate:\n' +
+              '  1. Stop the server (Ctrl+C)\n' +
+              '  2. Run: npx notebooklm-mcp setup-auth --show-browser\n' +
+              '  3. Restart: npm run start:http'
+          );
+        }
+        // After re-auth, navigate back to notebook (we may still be on Google sign-in page)
+        if (isOnGoogleSignIn) {
+          log.info(`  🌐 Re-navigating to notebook after auth...`);
+          await this.page.goto(this.notebookUrl, {
+            waitUntil: 'domcontentloaded',
+            timeout: CONFIG.browserTimeout,
+          });
+          await randomDelay(2000, 3000);
+          // Verify we actually made it to the notebook
+          const recheckUrl = this.page.url();
+          if (recheckUrl.includes('accounts.google.com')) {
+            throw new Error(
+              'Google session expired. Re-auth loaded cookies but Google still requires sign-in.\n' +
+                'Please re-authenticate:\n' +
+                '  1. Stop the server (Ctrl+C)\n' +
+                '  2. Run: npx notebooklm-mcp setup-auth --show-browser\n' +
+                '  3. Restart: npm run start:http'
+            );
+          }
         }
       } else {
         log.success(`  ✅ Session already authenticated`);
@@ -301,12 +336,23 @@ export class BrowserSession {
 
     log.info(`🔑 Checking authentication for session ${this.sessionId}...`);
 
-    // Check cookie validity
-    const isValid = await this.authManager.validateCookiesExpiry(this.context);
+    // IMPORTANT: Check actual page URL first — Google can expire sessions server-side
+    // even when local cookies still have valid expiry dates.
+    // If the browser is on accounts.google.com, cookies are worthless.
+    const currentUrl = this.page.url();
+    const onGoogleSignIn = currentUrl.includes('accounts.google.com');
 
-    if (isValid) {
-      log.success(`  ✅ Cookies valid`);
-      return true;
+    if (onGoogleSignIn) {
+      log.warning(
+        `  ⚠️ Page is on Google sign-in — cookies valid locally but session expired server-side`
+      );
+    } else {
+      // Only trust cookie validity when NOT on Google sign-in page
+      const isValid = await this.authManager.validateCookiesExpiry(this.context);
+      if (isValid) {
+        log.success(`  ✅ Cookies valid`);
+        return true;
+      }
     }
 
     log.warning(`  ⚠️  Cookies expired or invalid`);
@@ -341,11 +387,18 @@ export class BrowserSession {
       await (this.page as Page).reload({ waitUntil: 'domcontentloaded' });
       await randomDelay(2000, 3000);
 
-      // Check if it worked
-      const nowValid = await this.authManager.validateCookiesExpiry(this.context);
-      if (nowValid) {
-        log.success(`  ✅ Auth state loaded successfully`);
-        return true;
+      // Check if it worked — verify URL first (Google may still redirect)
+      const postReloadUrl = this.page.url();
+      if (postReloadUrl.includes('accounts.google.com')) {
+        log.warning(
+          `  ⚠️ Still on Google sign-in after loading auth state — session expired server-side`
+        );
+      } else {
+        const nowValid = await this.authManager.validateCookiesExpiry(this.context);
+        if (nowValid) {
+          log.success(`  ✅ Auth state loaded successfully`);
+          return true;
+        }
       }
     }
 
@@ -374,8 +427,78 @@ export class BrowserSession {
         return false;
       }
     } else {
-      log.error(`  ❌ Auto-login disabled and no valid auth state - manual login required`);
-      return false;
+      // Try auto-login with stored credentials (AutoLoginManager),
+      // then fall back to manual performSetup if no credentials.
+      log.warning(`  🔑 Attempting re-authentication...`);
+
+      try {
+        const accountManager = await getAccountManager();
+        const currentAccountId = await accountManager.getCurrentAccountId();
+        let reAuthSuccess = false;
+
+        if (currentAccountId) {
+          const account = accountManager.getAccount(currentAccountId);
+          if (account?.config.hasCredentials) {
+            // Auto-login uses account.profileDir (not chrome_profile) → no lock conflict
+            log.info(`  🤖 Auto-login with stored credentials...`);
+            const { AutoLoginManager } = await import('../accounts/auto-login-manager.js');
+            const autoLoginManager = new AutoLoginManager(accountManager);
+            const result = await autoLoginManager.performAutoLogin(currentAccountId, {
+              showBrowser: true,
+              timeout: CONFIG.autoLoginTimeoutMs * 2,
+            });
+
+            if (result.success) {
+              log.success(`  ✅ Auto-login successful`);
+
+              // Close current context → sync fresh profile → re-init
+              await this.sharedContextManager.closeContext();
+              this.page = null;
+              this.context = null as unknown as BrowserContext;
+              this.initialized = false;
+
+              await accountManager.syncProfileToMain(currentAccountId);
+              await this.init();
+              return true;
+            }
+            log.warning(`  ⚠️  Auto-login failed: ${result.error}`);
+          }
+        }
+
+        // Fall back to manual performSetup
+        log.warning(`  📝 Opening browser for manual login...`);
+
+        // Close context to release chrome_profile lock
+        await this.sharedContextManager.closeContext();
+        this.page = null;
+        this.context = null as unknown as BrowserContext;
+        this.initialized = false;
+
+        reAuthSuccess = await this.authManager.performSetup(
+          async (message) => {
+            log.info(`  ${message}`);
+          },
+          true, // show_browser = visible
+          true // force = skip cookie check
+        );
+
+        if (reAuthSuccess) {
+          log.success(`  ✅ Manual re-authentication successful`);
+
+          if (currentAccountId) {
+            await accountManager.syncMainToAccount(currentAccountId);
+          }
+
+          await this.init();
+          return true;
+        }
+
+        log.error(`  ❌ Re-authentication failed`);
+        return false;
+      } catch (error) {
+        log.error(`  ❌ Re-authentication failed: ${error}`);
+        return false;
+      }
     }
   }
 
@@ -481,15 +604,35 @@ export class BrowserSession {
 
       log.info(`💬 [${this.sessionId}] Asking: "${question.substring(0, 100)}..."`);
       const page = this.page!;
-      // Ensure we're still authenticated
+      // Ensure we're still authenticated — check URL first (Google redirect = expired)
       await sendProgress?.('Verifying authentication...', 2, 5);
-      const isAuth = await this.authManager.validateCookiesExpiry(this.context);
+      const currentUrl = page.url();
+      const isOnGoogle = currentUrl.includes('accounts.google.com');
+      const isAuth = isOnGoogle
+        ? false
+        : await this.authManager.validateCookiesExpiry(this.context);
       if (!isAuth) {
-        log.warning(`  🔑 Session expired, re-authenticating...`);
+        log.warning(
+          `  🔑 Session expired${isOnGoogle ? ' (redirected to Google sign-in)' : ''}, re-authenticating...`
+        );
         await sendProgress?.('Re-authenticating session...', 2, 5);
         const reAuthSuccess = await this.ensureAuthenticated();
         if (!reAuthSuccess) {
-          throw new Error('Failed to re-authenticate session');
+          throw new Error(
+            'SESSION_EXPIRED: Google session expired.\n' +
+              'Re-authenticate:\n' +
+              '  1. Stop the server (Ctrl+C)\n' +
+              '  2. Run: npx notebooklm-mcp setup-auth --show-browser\n' +
+              '  3. Restart: npm run start:http'
+          );
+        }
+        // After re-auth, navigate back to notebook if we were on Google
+        if (isOnGoogle) {
+          await this.page!.goto(this.notebookUrl, {
+            waitUntil: 'domcontentloaded',
+            timeout: CONFIG.browserTimeout,
+          });
+          await randomDelay(2000, 3000);
         }
       }
 
@@ -505,16 +648,6 @@ export class BrowserSession {
       log.info(`  🔍 Checking for rate limit before asking...`);
       if (await this.detectRateLimitError()) {
         throw new RateLimitError('NotebookLM daily limit reached - switching to another account');
-      }
-
-      // DEBUG: Take screenshot before asking to see UI state
-      try {
-        const debugPath = process.env.LOCALAPPDATA || 'C:\\Users\\romai\\AppData\\Local';
-        const screenshotPath = `${debugPath}\\notebooklm-mcp\\Data\\debug-before-ask.png`;
-        await page.screenshot({ path: screenshotPath, fullPage: true });
-        log.info(`  📸 Debug screenshot saved: ${screenshotPath}`);
-      } catch (e) {
-        log.warning(`  ⚠️ Could not save debug screenshot: ${e}`);
       }
 
       // Find the chat input
@@ -544,16 +677,6 @@ export class BrowserSession {
       // Small pause after submit
       await randomDelay(1000, 1500);
 
-      // DEBUG: Take screenshot after submitting question
-      try {
-        const debugPath = process.env.LOCALAPPDATA || 'C:\\Users\\romai\\AppData\\Local';
-        const screenshotPath = `${debugPath}\\notebooklm-mcp\\Data\\debug-after-submit.png`;
-        await page.screenshot({ path: screenshotPath, fullPage: true });
-        log.info(`  📸 Debug screenshot (after submit) saved: ${screenshotPath}`);
-      } catch (e) {
-        log.warning(`  ⚠️ Could not save debug screenshot: ${e}`);
-      }
-
       // Wait for the response with streaming detection
       log.info(`  ⏳ Waiting for response (with streaming detection)...`);
       await sendProgress?.('Waiting for NotebookLM response (streaming detection active)...', 3, 5);
@@ -562,7 +685,7 @@ export class BrowserSession {
         timeoutMs: 120000, // 2 minutes
         pollIntervalMs: 1000,
         ignoreTexts: existingResponses,
-        debug: true, // Enable debug to see exact text
+        debug: false,
       });
 
       if (!answer) {
@@ -895,6 +1018,31 @@ export class BrowserSession {
       // Reload the page to clear chat history
       await (this.page as Page).reload({ waitUntil: 'domcontentloaded' });
       await randomDelay(2000, 3000);
+
+      // Check if reload redirected to Google sign-in (session expired server-side)
+      const page = this.page as Page;
+      const postResetUrl = page.url();
+      if (postResetUrl.includes('accounts.google.com')) {
+        log.warning(
+          `  ⚠️ [${this.sessionId}] Google session expired during reset — attempting re-auth`
+        );
+        const loginSuccess = await this.ensureAuthenticated();
+        if (!loginSuccess) {
+          throw new Error(
+            'SESSION_EXPIRED: Google session expired during reset.\n' +
+              'Re-authenticate:\n' +
+              '  1. Stop the server (Ctrl+C)\n' +
+              '  2. Run: npx notebooklm-mcp setup-auth --show-browser\n' +
+              '  3. Restart: npm run start:http'
+          );
+        }
+        // Re-navigate to notebook after auth
+        await page.goto(this.notebookUrl, {
+          waitUntil: 'domcontentloaded',
+          timeout: CONFIG.browserTimeout,
+        });
+        await randomDelay(2000, 3000);
+      }
 
       // Wait for interface to be ready again
       await this.waitForNotebookLMReady();

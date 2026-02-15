@@ -7,6 +7,8 @@
 
 import express, { Request, Response, NextFunction } from 'express';
 import { randomUUID } from 'crypto';
+import net from 'net';
+import { execSync } from 'child_process';
 import { AuthManager } from './auth/auth-manager.js';
 import { SessionManager } from './session/session-manager.js';
 import { NotebookLibrary } from './library/notebook-library.js';
@@ -1035,7 +1037,157 @@ const VERSION = '1.5.3';
 
 const startupManager = new StartupManager(authManager);
 
-app.listen(PORT, HOST, async () => {
+// ============================================================================
+// Port management: detect and free ghost processes
+// ============================================================================
+
+/**
+ * Check if a port is currently in use
+ */
+function checkPort(port: number, host: string): Promise<boolean> {
+  return new Promise((resolve) => {
+    const socket = new net.Socket();
+    socket.setTimeout(1000);
+    socket.once('connect', () => {
+      socket.destroy();
+      resolve(true); // port is in use
+    });
+    socket.once('timeout', () => {
+      socket.destroy();
+      resolve(false); // port is free
+    });
+    socket.once('error', () => {
+      socket.destroy();
+      resolve(false); // port is free
+    });
+    socket.connect(port, host === '0.0.0.0' ? '127.0.0.1' : host);
+  });
+}
+
+/**
+ * Try to determine if the process on the port is a ghost (not responding to /health)
+ */
+async function isGhostProcess(port: number): Promise<boolean> {
+  try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 2000);
+    const res = await fetch(`http://127.0.0.1:${port}/health`, { signal: controller.signal });
+    clearTimeout(timeout);
+    // If it responds, it's a live server — not a ghost
+    return !res.ok;
+  } catch {
+    // No response = ghost process
+    return true;
+  }
+}
+
+/**
+ * Try to kill the process occupying a port
+ */
+function tryKillPort(port: number): boolean {
+  const isWindows = process.platform === 'win32';
+  try {
+    if (isWindows) {
+      // On Windows, find PID and kill it
+      const output = execSync(`netstat -ano | findstr :${port} | findstr LISTENING`, {
+        encoding: 'utf-8',
+        timeout: 5000,
+      });
+      const lines = output.trim().split('\n');
+      const pids = new Set<string>();
+      for (const line of lines) {
+        const parts = line.trim().split(/\s+/);
+        const pid = parts[parts.length - 1];
+        if (pid && pid !== '0') pids.add(pid);
+      }
+      for (const pid of pids) {
+        try {
+          execSync(`taskkill /F /PID ${pid}`, { timeout: 5000 });
+          log.info(`  Killed PID ${pid}`);
+        } catch {
+          // PID may already be dead
+        }
+      }
+      return pids.size > 0;
+    } else {
+      // On Linux/WSL, use fuser
+      execSync(`fuser -k ${port}/tcp`, { timeout: 5000 });
+      return true;
+    }
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Start the HTTP server with port conflict detection
+ */
+async function startServer(port: number, host: string): Promise<void> {
+  const portBusy = await checkPort(port, host);
+
+  if (portBusy) {
+    log.warning(`Port ${port} is already in use, checking if it's a ghost process...`);
+
+    const ghost = await isGhostProcess(port);
+    if (ghost) {
+      log.warning(`Ghost process detected on port ${port}, attempting to free it...`);
+      const freed = tryKillPort(port);
+
+      if (freed) {
+        log.success(`Port ${port} freed successfully`);
+        // Wait for OS to release the port
+        await new Promise((resolve) => setTimeout(resolve, 1500));
+
+        // Verify port is now free
+        const stillBusy = await checkPort(port, host);
+        if (stillBusy) {
+          log.error(`Port ${port} is still in use after kill attempt.`);
+          log.error(`  Manual fix:`);
+          log.error(`    Linux/WSL: fuser -k ${port}/tcp`);
+          log.error(`    Windows:   netstat -ano | findstr :${port}`);
+          log.error(`               taskkill /F /PID <PID>`);
+          process.exit(1);
+        }
+      } else {
+        log.error(`Could not free port ${port}.`);
+        log.error(`  Manual fix:`);
+        log.error(`    Linux/WSL: fuser -k ${port}/tcp`);
+        log.error(`    Windows PowerShell: wsl --shutdown (then retry)`);
+        log.error(`    Windows:   netstat -ano | findstr :${port}`);
+        log.error(`               taskkill /F /PID <PID>`);
+        process.exit(1);
+      }
+    } else {
+      // Port is busy but it's a live server responding to /health
+      log.error(`Port ${port} is already used by a running NotebookLM server.`);
+      log.error(`  Stop the other instance first, or use HTTP_PORT=<other_port>`);
+      process.exit(1);
+    }
+  }
+
+  // Start the server
+  return new Promise((resolve, reject) => {
+    const server = app.listen(port, host);
+
+    server.once('error', (err: NodeJS.ErrnoException) => {
+      if (err.code === 'EADDRINUSE') {
+        log.error(`Port ${port} became busy during startup (race condition).`);
+        log.error(`  Retry or use HTTP_PORT=<other_port>`);
+        process.exit(1);
+      }
+      reject(err);
+    });
+
+    server.once('listening', () => {
+      resolve();
+    });
+  });
+}
+
+// Main startup
+(async () => {
+  await startServer(PORT, HOST);
+
   log.success(`🌐 NotebookLM MCP HTTP Server v${VERSION}`);
   log.success(`   Listening on ${HOST}:${PORT}`);
 
@@ -1105,7 +1257,7 @@ app.listen(PORT, HOST, async () => {
   log.info('');
   log.dim('📖 Documentation: ./deployment/docs/');
   log.dim('⏹️  Press Ctrl+C to stop');
-});
+})();
 
 // Graceful shutdown with error handling
 process.on('SIGTERM', async () => {

@@ -993,7 +993,8 @@ export class AuthManager {
    */
   async performSetup(
     sendProgress?: ProgressCallback,
-    overrideHeadless?: boolean
+    overrideHeadless?: boolean,
+    force?: boolean
   ): Promise<boolean> {
     const { chromium } = await import('patchright');
 
@@ -1002,15 +1003,19 @@ export class AuthManager {
     const shouldShowBrowser = overrideHeadless !== undefined ? overrideHeadless : true;
 
     try {
-      // Check if already authenticated
-      const statePath = await this.getValidStatePath();
-      const isAuthenticated = statePath !== null;
+      // Check if already authenticated (skip with force=true)
+      if (!force) {
+        const statePath = await this.getValidStatePath();
+        const isAuthenticated = statePath !== null;
 
-      if (isAuthenticated) {
-        log.info('✅ Already authenticated, skipping setup');
-        log.info("   Use 're_auth' tool to switch accounts or re-authenticate");
-        await sendProgress?.('Already authenticated!', 10, 10);
-        return true;
+        if (isAuthenticated) {
+          log.info('✅ Already authenticated, skipping setup');
+          log.info("   Use 're_auth' tool to switch accounts or re-authenticate");
+          await sendProgress?.('Already authenticated!', 10, 10);
+          return true;
+        }
+      } else {
+        log.info('🔄 Force re-authentication requested');
       }
 
       log.info('🔄 Preparing for first-time authentication...');

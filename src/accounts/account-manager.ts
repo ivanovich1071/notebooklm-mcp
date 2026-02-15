@@ -716,6 +716,117 @@ export class AccountManager {
   hasAccounts(): boolean {
     return this.accounts.size > 0;
   }
+
+  /**
+   * Sync an account's Chrome profile and state to the main (shared) profile.
+   * This ensures the browser uses the same cookies/profile as the authenticated account.
+   *
+   * Copies:
+   * - account/<id>/browser_state/state.json → browser_state/state.json
+   * - account/<id>/profile/ → chrome_profile/
+   */
+  async syncProfileToMain(accountId: string): Promise<boolean> {
+    const account = this.accounts.get(accountId);
+    if (!account) {
+      log.warning(`syncProfileToMain: account ${accountId} not found`);
+      return false;
+    }
+
+    const mainStateFile = path.join(CONFIG.dataDir, 'browser_state', 'state.json');
+    const mainProfileDir = path.join(CONFIG.dataDir, 'chrome_profile');
+    const accountStateFile = account.stateFilePath;
+    const accountProfileDir = account.profileDir;
+
+    log.info(`  📋 Syncing account profile to main profile...`);
+
+    // Ensure main browser_state directory exists
+    const mainStateDir = path.dirname(mainStateFile);
+    if (!existsSync(mainStateDir)) {
+      await fs.mkdir(mainStateDir, { recursive: true });
+    }
+
+    // Sync state.json
+    if (existsSync(accountStateFile)) {
+      try {
+        await fs.copyFile(accountStateFile, mainStateFile);
+        log.success(`  ✅ State synced: ${accountStateFile} → ${mainStateFile}`);
+      } catch (e) {
+        log.warning(`  ⚠️ Could not sync state: ${e}`);
+        return false;
+      }
+    } else {
+      log.warning(`  ⚠️ Account state file not found: ${accountStateFile}`);
+      return false;
+    }
+
+    // Sync Chrome profile (delete old, copy new)
+    if (existsSync(accountProfileDir)) {
+      try {
+        await fs.rm(mainProfileDir, { recursive: true, force: true });
+        await fs.cp(accountProfileDir, mainProfileDir, { recursive: true });
+        log.success(`  ✅ Chrome profile synced: ${accountProfileDir} → ${mainProfileDir}`);
+      } catch (e) {
+        log.warning(`  ⚠️ Could not sync Chrome profile: ${e}`);
+        return false;
+      }
+    } else {
+      log.dim(`  ℹ️ No account profile directory to sync: ${accountProfileDir}`);
+    }
+
+    return true;
+  }
+
+  /**
+   * Sync main profile TO account (reverse direction).
+   * Used after performSetup saves fresh auth to the global paths.
+   * Copies main state.json → account state.json, main chrome_profile → account profile.
+   */
+  async syncMainToAccount(accountId: string): Promise<boolean> {
+    const account = this.accounts.get(accountId);
+    if (!account) {
+      log.warning(`syncMainToAccount: account ${accountId} not found`);
+      return false;
+    }
+
+    const mainStateFile = path.join(CONFIG.dataDir, 'browser_state', 'state.json');
+    const mainProfileDir = path.join(CONFIG.dataDir, 'chrome_profile');
+    const accountStateFile = account.stateFilePath;
+    const accountProfileDir = account.profileDir;
+
+    log.info(`  📋 Syncing main profile to account...`);
+
+    // Sync state.json: main → account
+    if (existsSync(mainStateFile)) {
+      try {
+        const accountStateDir = path.dirname(accountStateFile);
+        if (!existsSync(accountStateDir)) {
+          await fs.mkdir(accountStateDir, { recursive: true });
+        }
+        await fs.copyFile(mainStateFile, accountStateFile);
+        log.success(`  ✅ State synced: ${mainStateFile} → ${accountStateFile}`);
+      } catch (e) {
+        log.warning(`  ⚠️ Could not sync state to account: ${e}`);
+        return false;
+      }
+    }
+
+    // Sync Chrome profile: main → account
+    if (existsSync(mainProfileDir)) {
+      try {
+        if (!existsSync(path.dirname(accountProfileDir))) {
+          await fs.mkdir(path.dirname(accountProfileDir), { recursive: true });
+        }
+        await fs.rm(accountProfileDir, { recursive: true, force: true });
+        await fs.cp(mainProfileDir, accountProfileDir, { recursive: true });
+        log.success(`  ✅ Chrome profile synced: ${mainProfileDir} → ${accountProfileDir}`);
+      } catch (e) {
+        log.warning(`  ⚠️ Could not sync Chrome profile to account: ${e}`);
+        return false;
+      }
+    }
+
+    return true;
+  }
 }
 
 // Singleton instance

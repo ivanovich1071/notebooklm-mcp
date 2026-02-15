@@ -142,24 +142,85 @@ export class StartupManager {
     const authResult = await this.verifyAndConnectAccount(selectedAccount.config.id);
 
     if (authResult.authenticated) {
-      details.push('Authentication verified');
-      await this.accountManager.saveCurrentAccountId(selectedAccount.config.id);
-
+      // Cookies look valid on disk — but verify with a REAL browser navigation
+      // Google can revoke sessions server-side while local cookies still look fine
       log.info('');
-      log.success('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-      log.success(`  ✅ Ready - Connected as ${maskEmail(selectedAccount.config.email)}`);
-      log.success('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-      log.info('');
+      log.info('🌐 Step 4: Real browser verification...');
+      const realAuthValid = await this.verifyWithBrowser();
 
-      return {
-        success: true,
-        serverStarted: true,
-        authenticated: true,
-        accountId: selectedAccount.config.id,
-        accountEmail: selectedAccount.config.email,
-        message: `Connected as ${maskEmail(selectedAccount.config.email)}`,
-        details,
-      };
+      if (!realAuthValid) {
+        log.warning('  ⚠️  Google session expired server-side — launching re-authentication...');
+        details.push('Google session expired server-side, re-authenticating');
+
+        // Try auto-login first (uses stored credentials — fills email+password automatically)
+        const autoReauthResult = await this.attemptAutoReauth(selectedAccount.config.id);
+        let reAuthSuccess = autoReauthResult.success;
+
+        if (!reAuthSuccess) {
+          // Auto-login failed or no credentials — fall back to manual performSetup
+          log.warning(
+            `  ⚠️  Auto-login failed (${autoReauthResult.error}), falling back to manual login...`
+          );
+          reAuthSuccess = await this.authManager.performSetup(
+            async (message) => {
+              log.info(`  ${message}`);
+            },
+            true, // show_browser = visible
+            true // force = skip cookie check
+          );
+        }
+
+        if (reAuthSuccess) {
+          details.push('Re-authentication successful');
+          await this.accountManager.saveCurrentAccountId(selectedAccount.config.id);
+          // Sync fresh auth TO account
+          await this.accountManager.syncMainToAccount(selectedAccount.config.id);
+
+          log.info('');
+          log.success('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+          log.success(
+            `  ✅ Ready - Re-authenticated as ${maskEmail(selectedAccount.config.email)}`
+          );
+          log.success('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+          log.info('');
+
+          return {
+            success: true,
+            serverStarted: true,
+            authenticated: true,
+            accountId: selectedAccount.config.id,
+            accountEmail: selectedAccount.config.email,
+            message: `Re-authenticated as ${maskEmail(selectedAccount.config.email)}`,
+            details,
+          };
+        }
+
+        // Re-auth failed — fall through to try other accounts
+        details.push('Re-authentication failed');
+        log.error('  ❌ Re-authentication failed');
+        authResult.needsReauth = true;
+        authResult.authenticated = false;
+      } else {
+        details.push('Authentication verified (real browser check)');
+        await this.accountManager.saveCurrentAccountId(selectedAccount.config.id);
+        await this.accountManager.syncProfileToMain(selectedAccount.config.id);
+
+        log.info('');
+        log.success('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+        log.success(`  ✅ Ready - Connected as ${maskEmail(selectedAccount.config.email)}`);
+        log.success('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+        log.info('');
+
+        return {
+          success: true,
+          serverStarted: true,
+          authenticated: true,
+          accountId: selectedAccount.config.id,
+          accountEmail: selectedAccount.config.email,
+          message: `Connected as ${maskEmail(selectedAccount.config.email)}`,
+          details,
+        };
+      }
     }
 
     // Authentication failed for selected account, try others
@@ -176,6 +237,7 @@ export class StartupManager {
           details.push('Auto-reconnect successful');
           await this.accountManager.saveCurrentAccountId(selectedAccount.config.id);
           await this.accountManager.recordLoginSuccess(selectedAccount.config.id);
+          await this.accountManager.syncProfileToMain(selectedAccount.config.id);
 
           log.info('');
           log.success('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
@@ -247,6 +309,78 @@ export class StartupManager {
       message: 'Server started - Authentication required',
       details,
     };
+  }
+
+  /**
+   * Verify authentication with a REAL browser navigation.
+   * Launches a quick headless browser, navigates to NotebookLM,
+   * and checks if Google redirects to sign-in page.
+   * Returns true if we land on NotebookLM, false if redirected to Google.
+   */
+  private async verifyWithBrowser(): Promise<boolean> {
+    const { chromium } = await import('patchright');
+    let context;
+
+    try {
+      const browserLocale = CONFIG.uiLocale === 'fr' ? 'fr-FR' : 'en-US';
+      context = await chromium.launchPersistentContext(CONFIG.chromeProfileDir, {
+        headless: true,
+        ...(CONFIG.browserChannel === 'chrome' && { channel: 'chrome' as const }),
+        viewport: CONFIG.viewport,
+        locale: browserLocale,
+        args: [
+          '--disable-blink-features=AutomationControlled',
+          '--disable-dev-shm-usage',
+          '--no-first-run',
+          '--no-default-browser-check',
+          '--no-sandbox',
+          '--disable-setuid-sandbox',
+          '--disable-gpu',
+          '--disable-software-rasterizer',
+          '--disable-infobars',
+          '--disable-sync',
+          '--log-level=3',
+        ],
+      });
+
+      const pages = context.pages();
+      const page = pages.length > 0 ? pages[0] : await context.newPage();
+
+      // Navigate to NotebookLM
+      log.info('  🌐 Navigating to NotebookLM to verify session...');
+      await page.goto('https://notebooklm.google.com/', {
+        waitUntil: 'domcontentloaded',
+        timeout: 30000,
+      });
+
+      // Wait for any redirects to settle
+      await page.waitForTimeout(3000);
+
+      const finalUrl = page.url();
+      log.info(`  📍 Final URL: ${finalUrl}`);
+
+      const isOnGoogle = finalUrl.includes('accounts.google.com');
+
+      if (isOnGoogle) {
+        log.warning('  ❌ Redirected to Google sign-in — session is NOT valid');
+        return false;
+      }
+
+      log.success('  ✅ Landed on NotebookLM — session is valid');
+      return true;
+    } catch (error) {
+      log.warning(`  ⚠️  Browser verification failed: ${error}`);
+      // If verification itself fails, assume auth is OK and let runtime handle it
+      return true;
+    } finally {
+      if (context) {
+        try {
+          await context.close();
+        } catch {
+          /* ignore cleanup errors */
+        }
+      }
+    }
   }
 
   /**
@@ -371,6 +505,7 @@ export class StartupManager {
     const authResult = await this.verifyAndConnectAccount(selection.account.config.id);
     if (authResult.authenticated) {
       await this.accountManager.saveCurrentAccountId(selection.account.config.id);
+      await this.accountManager.syncProfileToMain(selection.account.config.id);
       return { success: true, accountId: selection.account.config.id };
     }
 
@@ -380,6 +515,7 @@ export class StartupManager {
       if (reAuthResult.success) {
         await this.accountManager.saveCurrentAccountId(selection.account.config.id);
         await this.accountManager.recordLoginSuccess(selection.account.config.id);
+        await this.accountManager.syncProfileToMain(selection.account.config.id);
         return { success: true, accountId: selection.account.config.id };
       }
     }

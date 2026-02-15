@@ -16,7 +16,6 @@
  */
 
 import fs from 'fs';
-import path from 'path';
 import { SessionManager } from '../session/session-manager.js';
 import { AuthManager } from '../auth/auth-manager.js';
 import { NotebookLibrary } from '../library/notebook-library.js';
@@ -1379,38 +1378,9 @@ export class ToolHandlers {
             if (loginResult.success) {
               log.success(`  ✅ Switched to new account successfully`);
 
-              // CRITICAL: Sync the new account's profile to the main profile
-              const account = accountManager.getAccount(accountId);
-              if (account) {
-                const mainStateFile = path.join(CONFIG.dataDir, 'browser_state', 'state.json');
-                const mainProfileDir = path.join(CONFIG.dataDir, 'chrome_profile');
-                const accountStateFile = account.stateFilePath;
-                const accountProfileDir = account.profileDir;
-
-                log.info(`  📋 Syncing account profile to main profile...`);
-
-                // Sync state.json
-                try {
-                  await fs.promises.copyFile(accountStateFile, mainStateFile);
-                  log.success(`  ✅ State synced: ${accountStateFile} → ${mainStateFile}`);
-                } catch (e) {
-                  log.warning(`  ⚠️ Could not sync state: ${e}`);
-                }
-
-                // Sync Chrome profile (delete old, copy new)
-                try {
-                  await fs.promises.rm(mainProfileDir, { recursive: true, force: true });
-                  await fs.promises.cp(accountProfileDir, mainProfileDir, { recursive: true });
-                  log.success(
-                    `  ✅ Chrome profile synced: ${accountProfileDir} → ${mainProfileDir}`
-                  );
-                } catch (e) {
-                  log.warning(`  ⚠️ Could not sync profile: ${e}`);
-                }
-
-                // Save the current account ID for future reference
-                await accountManager.saveCurrentAccountId(accountId);
-              }
+              // Sync the new account's profile to the main profile
+              await accountManager.syncProfileToMain(accountId);
+              await accountManager.saveCurrentAccountId(accountId);
 
               log.info(`  🔄 Retrying question with new account...`);
 

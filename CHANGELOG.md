@@ -7,6 +7,45 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.5.6] - 2026-02-15
+
+### Fixed
+
+**Citation Extraction (Major Rewrite):**
+
+- Rewrote citation excerpt extraction using `page.evaluate()` string expressions — eliminates all `ElementHandle` stale reference errors
+- Source names extracted from `span[aria-label]` in a single DOM scan (100% reliable)
+- Source excerpts extracted by clicking each citation → reading `i.highlighted` + parent `.paragraph` for full passage context
+- Added `Escape` dismiss between each citation click to prevent stale highlight contamination
+- Improved from ~50% to **97% success rate** (30/31 citations in real-world test)
+- Removed all debug screenshots and verbose logging from production code
+
+**Authentication & Session Recovery:**
+
+- Fixed false "Authenticated" at startup: `verifyWithBrowser()` now does real browser navigation to NotebookLM to check if Google session is truly valid (not just local cookie expiry dates)
+- Fixed mid-session `SESSION_EXPIRED`: auto-reauth now uses `AutoLoginManager` with stored credentials (fills email + password automatically), falls back to manual `performSetup()` if needed
+- Fixed profile sync direction bug: after `performSetup()`, uses `syncMainToAccount()` (not the reverse) to avoid overwriting fresh auth with stale account cookies
+- Fixed `setup-auth --force` flag to bypass cookie check and always open browser
+
+**Port Management:**
+
+- Added `EADDRINUSE` handling: detects ghost processes on port 3000, attempts auto-kill, provides clear error message if port cannot be freed
+
+### Added
+
+**Chrome Profile Auto-Sync:**
+
+- `syncProfileToMain(accountId)`: copies account-specific state/profile → main `chrome_profile/`
+- `syncMainToAccount(accountId)`: reverse sync after interactive re-auth
+- Both called automatically at the right points in startup and mid-session flows
+
+**Startup Browser Verification (Step 4):**
+
+- New `verifyWithBrowser()` method launches headless browser, navigates to NotebookLM, checks actual URL
+- If redirected to `accounts.google.com` → triggers auto-reauth with `AutoLoginManager` (automatic) or `performSetup()` (manual fallback)
+
+---
+
 ## [1.5.5] - 2026-01-31
 
 ### Fixed
