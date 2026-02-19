@@ -11,7 +11,8 @@
 FROM node:20-bookworm-slim
 
 # Install dependencies for Playwright/Chromium + noVNC
-RUN apt-get update && apt-get upgrade -y && apt-get install -y --no-install-recommends \
+RUN apt-get update && apt-get upgrade -y \
+    && apt-get install -y --no-install-recommends \
     # Playwright dependencies
     libnss3 \
     libnspr4 \
@@ -43,13 +44,7 @@ RUN apt-get update && apt-get upgrade -y && apt-get install -y --no-install-reco
     ca-certificates \
     procps \
     # Clean up
-    && rm -rf /var/lib/apt/lists/*
-
-# Install browsers via patchright (moved up for better caching)
-# This should ideally happen *after* dependencies are installed, but before copying source code
-# However, since patchright install happens during runtime in scripts usually, we can move it later.
-# For now, let's keep npm install and build together for correctness.
-# Let's move patchright install after npm run build as it might depend on project setup.
+    && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
 
 # Create non-root user for security
 RUN groupadd -r notebooklm && useradd -r -g notebooklm -d /home/notebooklm notebooklm \
@@ -65,35 +60,29 @@ WORKDIR /app
 # Copy package files first (better caching)
 COPY --chown=notebooklm:notebooklm package*.json ./
 
-# Switch to root temporarily to install dependencies
+# Switch to root temporarily to install dependencies and typescript
 USER root
 
 # Install dependencies (--ignore-scripts to skip husky prepare)
 RUN npm ci --omit=dev --ignore-scripts
 
+# Install TypeScript compiler for the build step
+RUN npm install --save-dev typescript
+
 # Install browsers via patchright (must match the patchright version)
 # Wrap in sh -c and force exit code 0 to handle potential non-zero exit codes from patchright
-RUN (npx patchright install chromium) || true
-# Optionally, you can check if the installation was successful after forcing the exit code
-# RUN ls -la /root/.cache/ms-playwright/chromium-* # Example check
+RUN sh -c 'npx patchright install chromium; true' || true
 
 # Switch back to non-root user
 USER notebooklm
 
-# --- ИЗМЕНЕНИЕ ---
 # Copy source code (including tsconfig, src/, etc.) needed for build
 COPY --chown=notebooklm:notebooklm . .
 
 # Build the project inside the container to create 'dist' folder
 RUN npm run build
-# --- КОНЕЦ ИЗМЕНЕНИЯ ---
 
-# Copy built application and scripts (this step is now redundant as dist is already there after build)
-# We can remove the explicit COPY for dist/ as it's already part of the WORKDIR after npm run build.
-# If the build script outputs to /app/dist, then the folder already exists correctly.
-# The scripts and package.json still need to be copied, but they were already included in the previous COPY . .
-# Let's ensure scripts are copied explicitly if build didn't overwrite them or they are outside src.
-# Since scripts are likely needed, we copy them again to ensure they are present and executable.
+# Copy scripts and package.json (might be needed at runtime)
 COPY --chown=notebooklm:notebooklm scripts/ ./scripts/
 COPY --chown=notebooklm:notebooklm package.json ./
 
