@@ -11,8 +11,7 @@
 FROM node:20-bookworm-slim
 
 # Install dependencies for Playwright/Chromium + noVNC
-UN apt-get update && apt-get upgrade -y \
-    && apt-get install -y --no-install-recommends \
+RUN apt-get update && apt-get upgrade -y && apt-get install -y --no-install-recommends \
     # Playwright dependencies
     libnss3 \
     libnspr4 \
