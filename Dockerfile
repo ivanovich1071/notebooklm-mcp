@@ -45,6 +45,12 @@ RUN apt-get update && apt-get install -y \
     # Clean up
     && rm -rf /var/lib/apt/lists/*
 
+# Install browsers via patchright (moved up for better caching)
+# This should ideally happen *after* dependencies are installed, but before copying source code
+# However, since patchright install happens during runtime in scripts usually, we can move it later.
+# For now, let's keep npm install and build together for correctness.
+# Let's move patchright install after npm run build as it might depend on project setup.
+
 # Create non-root user for security
 RUN groupadd -r notebooklm && useradd -r -g notebooklm -d /home/notebooklm notebooklm \
     && mkdir -p /home/notebooklm /app /data \
@@ -59,21 +65,37 @@ WORKDIR /app
 # Copy package files first (better caching)
 COPY --chown=notebooklm:notebooklm package*.json ./
 
-# Switch to non-root user
-USER notebooklm
+# Switch to root temporarily to install dependencies
+USER root
 
 # Install dependencies (--ignore-scripts to skip husky prepare)
 RUN npm ci --omit=dev --ignore-scripts
 
 # Install browsers via patchright (must match the patchright version)
+# This step is crucial and must happen after npm install because patchright might be a dependency
 RUN npx patchright install chromium
 
-# Copy built application and scripts
-COPY --chown=notebooklm:notebooklm dist/ ./dist/
+# Switch back to non-root user
+USER notebooklm
+
+# --- ИЗМЕНЕНИЕ ---
+# Copy source code (including tsconfig, src/, etc.) needed for build
+COPY --chown=notebooklm:notebooklm . .
+
+# Build the project inside the container to create 'dist' folder
+RUN npm run build
+# --- КОНЕЦ ИЗМЕНЕНИЯ ---
+
+# Copy built application and scripts (this step is now redundant as dist is already there after build)
+# We can remove the explicit COPY for dist/ as it's already part of the WORKDIR after npm run build.
+# If the build script outputs to /app/dist, then the folder already exists correctly.
+# The scripts and package.json still need to be copied, but they were already included in the previous COPY . .
+# Let's ensure scripts are copied explicitly if build didn't overwrite them or they are outside src.
+# Since scripts are likely needed, we copy them again to ensure they are present and executable.
 COPY --chown=notebooklm:notebooklm scripts/ ./scripts/
 COPY --chown=notebooklm:notebooklm package.json ./
 
-# Make scripts executable
+# Make scripts executable (needs root)
 USER root
 RUN chmod +x /app/scripts/*.sh
 USER notebooklm
