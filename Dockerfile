@@ -1,19 +1,12 @@
-# NotebookLM MCP Server - Docker Image
-#
-# Build: docker build -t notebooklm-mcp .
-# Run:   docker run -p 3000:3000 -p 6080:6080 -v notebooklm-data:/data notebooklm-mcp
-#
-# Ports:
-#   3000 - MCP HTTP API
-#   6080 - noVNC web interface (for initial Google auth setup)
+# --- BUILD STAGE ---
+# Use Node.js with Debian for build dependencies
+FROM node:20-bookworm-slim AS builder
 
-# Use Node.js with Debian for Playwright compatibility
-FROM node:20-bookworm-slim
-
-# Install dependencies for Playwright/Chromium + noVNC
+# Install system dependencies for Playwright/Chromium + noVNC (needed for build tools potentially)
+# Even if not used in final stage, build tools might need them
 RUN apt-get update && apt-get upgrade -y \
     && apt-get install -y --no-install-recommends \
-    # Playwright dependencies
+    # Playwright dependencies (just in case build tools need them)
     libnss3 \
     libnspr4 \
     libatk1.0-0 \
@@ -31,7 +24,7 @@ RUN apt-get update && apt-get upgrade -y \
     libasound2 \
     libpango-1.0-0 \
     libcairo2 \
-    # noVNC dependencies
+    # noVNC dependencies (just in case)
     xvfb \
     x11vnc \
     novnc \
@@ -46,7 +39,7 @@ RUN apt-get update && apt-get upgrade -y \
     # Clean up
     && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
 
-# Create non-root user for security
+# Create non-root user for security (used in both stages)
 RUN groupadd -r notebooklm && useradd -r -g notebooklm -d /home/notebooklm notebooklm \
     && mkdir -p /home/notebooklm /app /data \
     && chown -R notebooklm:notebooklm /home/notebooklm /app /data \
@@ -60,31 +53,77 @@ WORKDIR /app
 # Copy package files first (better caching)
 COPY --chown=notebooklm:notebooklm package*.json ./
 
-# Switch to root temporarily to install dependencies and typescript
+# Switch to root to install dependencies (including devDependencies for build)
 USER root
 
-# Install dependencies (--ignore-scripts to skip husky prepare)
-RUN npm ci --omit=dev --ignore-scripts
+# Install ALL dependencies (prod and dev) for the build
+RUN npm ci --include=dev --ignore-scripts
 
-# Install TypeScript compiler for the build step
-RUN npm install --save-dev typescript
-
-# Install browsers via patchright (must match the patchright version)
-# Wrap in sh -c and force exit code 0 to handle potential non-zero exit codes from patchright
-RUN sh -c 'npx patchright install chromium; true' || true
-
-# Switch back to non-root user
-USER notebooklm
-
-# Copy source code (including tsconfig, src/, etc.) needed for build
+# Copy source code needed for build
 COPY --chown=notebooklm:notebooklm . .
 
 # Build the project inside the container to create 'dist' folder
+# This step requires typescript and other dev dependencies to be installed
 RUN npm run build
 
-# Copy scripts and package.json (might be needed at runtime)
-COPY --chown=notebooklm:notebooklm scripts/ ./scripts/
-COPY --chown=notebooklm:notebooklm package.json ./
+# --- FINAL STAGE ---
+FROM node:20-bookworm-slim AS final
+
+# Reinstall system dependencies required at runtime
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    # Playwright dependencies (required for running Playwright)
+    libnss3 \
+    libnspr4 \
+    libatk1.0-0 \
+    libatk-bridge2.0-0 \
+    libcups2 \
+    libdrm2 \
+    libdbus-1-3 \
+    libxkbcommon0 \
+    libatspi2.0-0 \
+    libxcomposite1 \
+    libxdamage1 \
+    libxfixes3 \
+    libxrandr2 \
+    libgbm1 \
+    libasound2 \
+    libpango-1.0-0 \
+    libcairo2 \
+    # noVNC dependencies (required for VNC)
+    xvfb \
+    x11vnc \
+    novnc \
+    websockify \
+    fluxbox \
+    # Additional utilities
+    fonts-liberation \
+    fonts-noto-color-emoji \
+    wget \
+    ca-certificates \
+    procps \
+    # Clean up
+    && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
+
+# Recreate user/group (UID/GID might differ, but consistency is good practice)
+RUN groupadd -r notebooklm && useradd -r -g notebooklm -d /home/notebooklm notebooklm \
+    && mkdir -p /home/notebooklm /app /data \
+    && chown -R notebooklm:notebooklm /home/notebooklm /app /data \
+    && mkdir -p /tmp/.X11-unix \
+    && chmod 1777 /tmp/.X11-unix
+
+WORKDIR /app
+
+# Copy built application and scripts from the builder stage
+COPY --from=builder --chown=notebooklm:notebooklm /app/dist ./dist
+COPY --from=builder --chown=notebooklm:notebooklm /app/scripts ./scripts
+COPY --from=builder --chown=notebooklm:notebooklm /app/package*.json ./
+
+# Install *only* production dependencies for the final image
+RUN npm ci --omit=dev --ignore-scripts --only=production
+
+# Install browsers via patchright into the final image
+# Wrap in sh -c and force exit code 0 to handle potential non-zero exit codes from patchright itself
+RUN sh -c 'npx patchright install chromium; true' || true
 
 # Make scripts executable (needs root)
 USER root
