@@ -1,3 +1,5 @@
+// src/types.ts
+
 /**
  * Global type definitions for NotebookLM MCP Server
  */
@@ -28,15 +30,16 @@ export interface Citation {
 
 /**
  * Session information returned by the API
+ * Matches the structure from session store / manager
  */
 export interface SessionInfo {
   id: string;
-  created_at: number;
-  last_activity: number;
+  created_at: number; // Unix timestamp (ms)
+  last_activity: number; // Unix timestamp (ms)
   age_seconds: number;
   inactive_seconds: number;
   message_count: number;
-  notebook_url: string;
+  notebook_url: string; // Full URL to the notebook
 }
 
 /**
@@ -54,7 +57,8 @@ export interface SourceCitations {
 }
 
 /**
- * Session info included in successful responses
+ * Session info included in successful responses (subset of SessionInfo)
+ * Used specifically in AskQuestionSuccess.
  */
 export interface AskSessionInfo {
   age_seconds: number;
@@ -64,14 +68,15 @@ export interface AskSessionInfo {
 
 /**
  * Successful question result
+ * Includes session info and optional sources if format is not 'none'.
  */
 export interface AskQuestionSuccess {
   status: 'success';
   question: string;
   answer: string;
-  notebook_url: string;
-  session_id: string;
-  session_info: AskSessionInfo;
+  notebook_url: string; // Full URL to the notebook where question was asked
+  session_id: string; // ID of the session used
+  session_info: AskSessionInfo; // Basic session metrics
   /** Extracted source citations (when source_format is not 'none') */
   sources?: SourceCitations;
 }
@@ -83,7 +88,7 @@ export interface AskQuestionError {
   status: 'error';
   question: string;
   error: string;
-  notebook_url: string;
+  notebook_url: string; // Might be included if error occurs after notebook resolution
 }
 
 /**
@@ -94,15 +99,21 @@ export type AskQuestionResult = AskQuestionSuccess | AskQuestionError;
 
 /**
  * Tool call result for MCP (generic wrapper for tool responses)
+ * Defines the standard shape for MCP tool results.
  */
 export interface ToolResult<T = unknown> {
   success: boolean;
   data?: T;
-  error?: string;
+  error?: {
+    message: string;
+    code?: string;
+    details?: Record<string, unknown>;
+  };
 }
 
 /**
  * JSON Schema property definition
+ * Used for generating MCP tool schemas.
  */
 export interface JsonSchemaProperty {
   type: string;
@@ -116,6 +127,7 @@ export interface JsonSchemaProperty {
 
 /**
  * MCP Tool definition
+ * Structure for defining MCP tools exposed by the server.
  */
 export interface Tool {
   name: string;
@@ -124,12 +136,13 @@ export interface Tool {
   inputSchema: {
     type: 'object';
     properties: Record<string, JsonSchemaProperty>;
-    required?: string[];
+    required?: string[]; // Optional in JSON Schema, but often useful
   };
 }
 
 /**
- * Options for human-like typing
+ * Options for human-like typing simulation
+ * Used in playwright interactions.
  */
 export interface TypingOptions {
   wpm?: number; // Words per minute
@@ -137,31 +150,65 @@ export interface TypingOptions {
 }
 
 /**
- * Options for waiting for answers
+ * Options for waiting for answers from NotebookLM
+ * Used in polling mechanisms.
  */
 export interface WaitForAnswerOptions {
-  question?: string;
-  timeoutMs?: number;
-  pollIntervalMs?: number;
-  ignoreTexts?: string[];
-  debug?: boolean;
+  question?: string; // Associated question for context
+  timeoutMs?: number; // Max time to wait
+  pollIntervalMs?: number; // Interval between polls
+  ignoreTexts?: string[]; // Texts to ignore during polling
+  debug?: boolean; // Enable debug logging
 }
 
 /**
  * Progress callback function for MCP progress notifications
+ * Asynchronous function to report progress during long-running operations.
  */
 export type ProgressCallback = (
   message: string,
-  progress?: number,
-  total?: number
+  progress?: number, // Current progress count
+  total?: number // Total expected count
 ) => Promise<void>;
+
+// --- NEW TYPES ADDED FOR COMPLETENESS ---
+
+/**
+ * Result for adding a source
+ */
+export interface AddSourceResult {
+  success: boolean;
+  source_id?: string;
+  title?: string;
+  error?: string;
+}
+
+/**
+ * Item representing a source in a list
+ */
+export interface SourceListItem {
+  id: string;
+  title: string;
+  type: 'pdf' | 'docx' | 'txt' | 'url' | 'youtube' | 'drive';
+  added_at: number; // Unix timestamp (ms)
+}
+
+/**
+ * Result for listing sources
+ */
+export interface ListSourcesResult {
+  sources: SourceListItem[];
+}
+
+// --- END NEW TYPES ---
 
 /**
  * Global state for the server (legacy - prefer direct imports)
  * @deprecated Use direct imports of SessionManager and AuthManager instead
+ * Kept for backward compatibility if referenced elsewhere.
  */
 export interface ServerState {
-  playwright: unknown;
-  sessionManager: unknown;
-  authManager: unknown;
+  playwright: unknown; // Playwright instance
+  sessionManager: unknown; // SessionManager instance
+  authManager: unknown; // AuthManager instance
 }
