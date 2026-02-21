@@ -1,8 +1,5 @@
 /**
  * NotebookLM MCP - Internationalization (i18n) System
- *
- * Provides localized UI selectors for different NotebookLM language settings.
- * The UI language in NotebookLM follows the user's Google Account language.
  */
 
 import * as fs from 'fs';
@@ -14,136 +11,65 @@ import { log } from '../utils/logger.js';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// Locale data structure
+// ================= TYPES =================
+
 export interface LocaleData {
   locale: string;
   name: string;
   description: string;
-  tabs: {
-    sources: string;
-    discussion: string;
-    studio: string;
-  };
-  buttons: {
-    addSource: string;
-    addNote: string;
-    newNote: string;
-    insert: string;
-    add: string;
-    upload: string;
-    delete: string;
-    remove: string;
-    confirm: string;
-    yes: string;
-    cancel: string;
-    close: string;
-    save: string;
-    done: string;
-    create: string;
-    download: string;
-    generate: string;
-  };
-  sourceTypes: {
-    uploadFiles: string;
-    website: string;
-    link: string;
-    url: string;
-    pastedText: string;
-    drive: string;
-    youtube: string;
-  };
-  placeholders: {
-    pasteUrl: string;
-    enterUrl: string;
-    pasteLinks: string;
-  };
-  sourceNames: {
-    pastedText: string;
-  };
-  contentTypes: {
-    audio: string;
-    video: string;
-    presentation: string;
-    slides: string;
-    infographic: string;
-    report: string;
-    briefing: string;
-    dataTable: string;
-    table: string;
-  };
-  contentOptions: {
-    videoStyles: Record<string, string>;
-    videoFormats: Record<string, string>;
-    presentationStyles: Record<string, string>;
-    presentationLengths: Record<string, string>;
-    infographicFormats: Record<string, string>;
-    reportFormats: Record<string, string>;
-  };
-  dialogs: {
-    selectLanguage: string;
-    language: string;
-  };
-  actions: {
-    openInSheets: string;
-    openInSlides: string;
-    deepDive: string;
-    audioOverview: string;
-    addToSources: string;
-    convertToSource: string;
-  };
-  status: {
-    generating: string;
-    processing: string;
-    ready: string;
-  };
-  errors: {
-    error: string;
-    rateLimitReached: string;
-  };
+  tabs: Record<string, string>;
+  buttons: Record<string, string>;
+  sourceTypes: Record<string, string>;
+  placeholders: Record<string, string>;
+  sourceNames: Record<string, string>;
+  contentTypes: Record<string, string>;
+  contentOptions: Record<string, Record<string, string>>;
+  dialogs: Record<string, string>;
+  actions: Record<string, string>;
+  status: Record<string, string>;
+  errors: Record<string, string>;
 }
 
-// Supported locales
 export type SupportedLocale = 'fr' | 'en';
 
-// Default locale
 const DEFAULT_LOCALE: SupportedLocale = 'fr';
 
-// Cache for loaded locales
 const localeCache: Map<string, LocaleData> = new Map();
-
-// Current locale
 let currentLocale: SupportedLocale = DEFAULT_LOCALE;
 
-/**
- * Get the i18n directory path
- */
-function getI18nDir(): string {
-  // In compiled code, we're in dist/i18n, source is in src/i18n
-  const distPath = path.join(__dirname, '.');
-  const srcPath = path.join(__dirname, '..', '..', 'src', 'i18n');
+// ================= PATH RESOLUTION =================
 
-  // Check if JSON files exist in dist (they should be copied during build)
-  if (fs.existsSync(path.join(distPath, 'fr.json'))) {
-    return distPath;
-  }
-  // Fallback to src directory (for development)
-  if (fs.existsSync(path.join(srcPath, 'fr.json'))) {
-    return srcPath;
-  }
-  // Last resort: check relative to cwd
-  const cwdPath = path.join(process.cwd(), 'src', 'i18n');
-  if (fs.existsSync(path.join(cwdPath, 'fr.json'))) {
-    return cwdPath;
-  }
-
-  throw new Error('Could not find i18n locale files');
+function directoryHasLocales(dir: string): boolean {
+  return (
+    fs.existsSync(path.join(dir, 'fr.json')) &&
+    fs.existsSync(path.join(dir, 'en.json'))
+  );
 }
 
 /**
- * Load a locale file
+ * Resolve i18n directory safely in production & development
  */
+function getI18nDir(): string {
+  const candidates = [
+    __dirname, // dist/i18n
+    path.join(process.cwd(), 'dist', 'i18n'),
+    path.join(process.cwd(), 'src', 'i18n'),
+  ];
+
+  for (const dir of candidates) {
+    if (directoryHasLocales(dir)) {
+      return dir;
+    }
+  }
+
+  throw new Error(
+    `Could not find i18n locale files. Checked: ${candidates.join(', ')}`
+  );
+}
+
+// ================= LOADING =================
+
 function loadLocale(locale: string): LocaleData {
-  // Check cache first
   if (localeCache.has(locale)) {
     return localeCache.get(locale)!;
   }
@@ -152,7 +78,9 @@ function loadLocale(locale: string): LocaleData {
   const localePath = path.join(i18nDir, `${locale}.json`);
 
   if (!fs.existsSync(localePath)) {
-    log.warning(`Locale file not found: ${localePath}, falling back to ${DEFAULT_LOCALE}`);
+    log.warning(
+      `Locale file not found: ${localePath}, falling back to ${DEFAULT_LOCALE}`
+    );
     if (locale !== DEFAULT_LOCALE) {
       return loadLocale(DEFAULT_LOCALE);
     }
@@ -174,149 +102,118 @@ function loadLocale(locale: string): LocaleData {
   }
 }
 
-/**
- * Set the current locale
- */
+// ================= PUBLIC API =================
+
 export function setLocale(locale: SupportedLocale): void {
   currentLocale = locale;
-  loadLocale(locale); // Pre-load the locale
+  loadLocale(locale);
   log.info(`🌐 Locale set to: ${locale}`);
 }
 
-/**
- * Get the current locale
- */
 export function getLocale(): SupportedLocale {
   return currentLocale;
 }
 
-/**
- * Get the current locale data
- */
 export function getLocaleData(): LocaleData {
   return loadLocale(currentLocale);
 }
 
-/**
- * Get all supported locales
- */
 export function getSupportedLocales(): SupportedLocale[] {
   return ['fr', 'en'];
 }
 
-/**
- * Check if a locale is supported
- */
 export function isLocaleSupported(locale: string): locale is SupportedLocale {
   return getSupportedLocales().includes(locale as SupportedLocale);
 }
 
-/**
- * Helper class for generating bilingual selectors
- * This allows selecting elements that might be in any supported language
- */
+// ================= SELECTOR BUILDER =================
+
 export class SelectorBuilder {
   private selectors: string[] = [];
 
-  /**
-   * Add a button selector with text from all locales
-   */
-  buttonWithText(textKey: keyof LocaleData['buttons']): this {
+  buttonWithText(textKey: string): this {
     for (const locale of getSupportedLocales()) {
       const data = loadLocale(locale);
-      const text = data.buttons[textKey];
-      this.selectors.push(`button:has-text("${text}")`);
+      if (data.buttons[textKey]) {
+        this.selectors.push(`button:has-text("${data.buttons[textKey]}")`);
+      }
     }
     return this;
   }
 
-  /**
-   * Add a tab selector with text from all locales
-   */
-  tabWithText(textKey: keyof LocaleData['tabs']): this {
+  tabWithText(textKey: string): this {
     for (const locale of getSupportedLocales()) {
       const data = loadLocale(locale);
-      const text = data.tabs[textKey];
-      this.selectors.push(`div.mdc-tab:has-text("${text}")`);
-      this.selectors.push(`.mat-mdc-tab:has-text("${text}")`);
-      this.selectors.push(`[role="tab"]:has-text("${text}")`);
+      if (data.tabs[textKey]) {
+        const text = data.tabs[textKey];
+        this.selectors.push(`div.mdc-tab:has-text("${text}")`);
+        this.selectors.push(`.mat-mdc-tab:has-text("${text}")`);
+        this.selectors.push(`[role="tab"]:has-text("${text}")`);
+      }
     }
     return this;
   }
 
-  /**
-   * Add a generic text selector from all locales
-   */
   hasText(category: keyof LocaleData, key: string): this {
     for (const locale of getSupportedLocales()) {
       const data = loadLocale(locale);
       const categoryData = data[category] as Record<string, string>;
-      if (categoryData && categoryData[key]) {
+      if (categoryData?.[key]) {
         this.selectors.push(`:has-text("${categoryData[key]}")`);
       }
     }
     return this;
   }
 
-  /**
-   * Add a custom selector
-   */
   custom(selector: string): this {
     this.selectors.push(selector);
     return this;
   }
 
-  /**
-   * Build and return the selectors array
-   */
   build(): string[] {
-    return [...new Set(this.selectors)]; // Remove duplicates
+    return [...new Set(this.selectors)];
   }
 
-  /**
-   * Build a combined selector (any match)
-   */
   buildCombined(): string {
     return this.build().join(', ');
   }
 }
 
-/**
- * Create a new selector builder
- */
 export function selectors(): SelectorBuilder {
   return new SelectorBuilder();
 }
 
-/**
- * Get text in current locale
- */
+// ================= TRANSLATION HELPERS =================
+
 export function t(category: keyof LocaleData, key: string): string {
   const data = getLocaleData();
   const categoryData = data[category] as Record<string, unknown>;
+
   if (categoryData && typeof categoryData[key] === 'string') {
     return categoryData[key] as string;
   }
-  log.warning(`Translation not found: ${category}.${key}`);
+
+  log.warning(`Translation not found: ${String(category)}.${key}`);
   return key;
 }
 
-/**
- * Get text in all locales (for selector building)
- */
 export function tAll(category: keyof LocaleData, key: string): string[] {
   const results: string[] = [];
+
   for (const locale of getSupportedLocales()) {
     const data = loadLocale(locale);
     const categoryData = data[category] as Record<string, unknown>;
+
     if (categoryData && typeof categoryData[key] === 'string') {
       results.push(categoryData[key] as string);
     }
   }
-  return [...new Set(results)]; // Remove duplicates (e.g., "Sources" is same in FR and EN)
+
+  return [...new Set(results)];
 }
 
-// Initialize with default locale
+// ================= INIT =================
+
 loadLocale(DEFAULT_LOCALE);
 
 export default {
