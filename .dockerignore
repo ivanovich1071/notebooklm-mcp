@@ -8,7 +8,7 @@ node_modules
 # Source files (only dist is needed)
 src
 *.ts
-tsconfig*.json
+!tsconfig*.json
 
 # Tests
 tests
