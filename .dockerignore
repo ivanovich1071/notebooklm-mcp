@@ -5,12 +5,16 @@
 # Dependencies (will be installed in container)
 node_modules
 
-# Source files (only dist is needed)
-src
-*.ts
-#!tsconfig*.json
+# Source files *are needed* for the build step. Do NOT exclude 'src'.
+# The 'dist' folder will be created by the build process inside the container.
+# src  <- УДАЛЕНО ЭТУ СТРОКУ
 
-# Tests
+# Specific source file types *can* be excluded if they are not needed for the build,
+# but excluding the entire 'src' directory prevents 'tsc' from finding input files.
+*.ts
+#!tsconfig*.json  # Это правило, вероятно, лишнее и путаное. tsconfig.json НУЖЕН.
+
+# Tests (usually not needed in production container)
 tests
 *.test.ts
 *.test.js
@@ -21,8 +25,9 @@ coverage
 .env
 .env.*
 *.log
+# Скорее всего, README.md не нужен в контейнере, можно исключить все .md
 *.md
-!README.md
+# !README.md  <- Можно оставить, если он нужен, но обычно не нужен. Закомментировано.
 
 # IDE/Editor
 .vscode
@@ -34,21 +39,24 @@ coverage
 .DS_Store
 Thumbs.db
 
-# Build artifacts not needed
+# Build artifacts not needed (the build process will create a fresh 'dist')
 *.tsbuildinfo
 
 # Documentation (optional in container)
 docs
 deployment
 
-# Local data (should be mounted as volume)
+# Local data (should be mounted as volume, not copied)
 library.json
 *.enc.json
 
 # Claude/development specific
 .claude
-scripts/*.ps1
+scripts/*.ps1  # Скрипты PowerShell могут быть нужен, если они вызываются в процессе сборки.
 *.output
 
-# Husky hooks
+# Husky hooks (not needed in container)
 .husky
+
+# Lock file should be included for reproducible builds
+# package-lock.json <- УБЕДИТЕСЬ, ЧТО ЭТА СТРОКА НЕ ЗАКОММЕНТИРОВАНА
