@@ -29,20 +29,6 @@ export interface Citation {
 }
 
 /**
- * Session information returned by the API
- * Matches the structure from session store / manager
- */
-export interface SessionInfo {
-  id: string;
-  created_at: number; // Unix timestamp (ms)
-  last_activity: number; // Unix timestamp (ms)
-  age_seconds: number;
-  inactive_seconds: number;
-  message_count: number;
-  notebook_url: string; // Full URL to the notebook
-}
-
-/**
  * Source citations data
  */
 export interface SourceCitations {
@@ -54,6 +40,20 @@ export interface SourceCitations {
   extraction_success: boolean;
   /** Error message if extraction failed */
   extraction_error?: string;
+}
+
+/**
+ * Session information returned by the API
+ * Matches the structure from session store / manager
+ */
+export interface SessionInfo {
+  id: string;
+  created_at: number; // Unix timestamp (ms)
+  last_activity: number; // Unix timestamp (ms)
+  age_seconds: number;
+  inactive_seconds: number;
+  message_count: number;
+  notebook_url: string; // Full URL to the notebook
 }
 
 /**
@@ -100,6 +100,7 @@ export type AskQuestionResult = AskQuestionSuccess | AskQuestionError;
 /**
  * Tool call result for MCP (generic wrapper for tool responses)
  * Defines the standard shape for MCP tool results.
+ * Uses an object for error to comply with MCP spec recommendations.
  */
 export interface ToolResult<T = unknown> {
   success: boolean;
@@ -206,6 +207,7 @@ export interface ListSourcesResult {
  * Global state for the server (legacy - prefer direct imports)
  * @deprecated Use direct imports of SessionManager and AuthManager instead
  * Kept for backward compatibility if referenced elsewhere.
+ * Using 'unknown' for external instances like Playwright for type safety.
  */
 export interface ServerState {
   playwright: unknown; // Playwright instance
