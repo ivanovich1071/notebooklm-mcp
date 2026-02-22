@@ -1407,21 +1407,23 @@ export class ToolHandlers {
         // If rotation failed, return the original error
         return {
           success: false,
-          error:
-            'NotebookLM rate limit reached (50 queries/day for free accounts).\n\n' +
-            'Automatic account rotation failed or no other accounts available.\n\n' +
-            'You can:\n' +
-            "1. Use the 're_auth' tool to login with a different Google account\n" +
-            '2. Wait until tomorrow for the quota to reset\n' +
-            '3. Upgrade to Google AI Pro/Ultra for 5x higher limits\n\n' +
-            `Original error: ${errorMessage}`,
+          error: {
+            message:
+              'NotebookLM rate limit reached (50 queries/day for free accounts).\n\n' +
+              'Automatic account rotation failed or no other accounts available.\n\n' +
+              'You can:\n' +
+              "1. Use the 're_auth' tool to login with a different Google account\n" +
+              '2. Wait until tomorrow for the quota to reset\n' +
+              '3. Upgrade to Google AI Pro/Ultra for 5x higher limits\n\n' +
+              `Original error: ${errorMessage}`,
+          },
         };
       }
 
       log.error(`❌ [TOOL] ask_question failed: ${errorMessage}`);
       return {
         success: false,
-        error: errorMessage,
+        error: { message: errorMessage },
       };
     }
   }
@@ -1480,7 +1482,7 @@ export class ToolHandlers {
       log.error(`❌ [TOOL] list_sessions failed: ${errorMessage}`);
       return {
         success: false,
-        error: errorMessage,
+        error: { message: errorMessage },
       };
     }
   }
@@ -1513,7 +1515,7 @@ export class ToolHandlers {
         log.warning(`⚠️  [TOOL] Session ${session_id} not found`);
         return {
           success: false,
-          error: `Session ${session_id} not found`,
+          error: { message: `Session ${session_id} not found` },
         };
       }
     } catch (error) {
@@ -1521,7 +1523,7 @@ export class ToolHandlers {
       log.error(`❌ [TOOL] close_session failed: ${errorMessage}`);
       return {
         success: false,
-        error: errorMessage,
+        error: { message: errorMessage },
       };
     }
   }
@@ -1544,7 +1546,7 @@ export class ToolHandlers {
         log.warning(`⚠️  [TOOL] Session ${session_id} not found`);
         return {
           success: false,
-          error: `Session ${session_id} not found`,
+          error: { message: `Session ${session_id} not found` },
         };
       }
 
@@ -1564,7 +1566,7 @@ export class ToolHandlers {
       log.error(`❌ [TOOL] reset_session failed: ${errorMessage}`);
       return {
         success: false,
-        error: errorMessage,
+        error: { message: errorMessage },
       };
     }
   }
@@ -1676,7 +1678,7 @@ export class ToolHandlers {
       log.error(`❌ [TOOL] get_health failed: ${errorMessage}`);
       return {
         success: false,
-        error: errorMessage,
+        error: { message: errorMessage },
       };
     }
   }
@@ -1751,7 +1753,7 @@ export class ToolHandlers {
         log.error(`❌ [TOOL] setup_auth failed (${durationSeconds.toFixed(1)}s)`);
         return {
           success: false,
-          error: 'Authentication failed or was cancelled',
+          error: { message: 'Authentication failed or was cancelled' },
         };
       }
     } catch (error) {
@@ -1760,7 +1762,7 @@ export class ToolHandlers {
       log.error(`❌ [TOOL] setup_auth failed: ${errorMessage} (${durationSeconds.toFixed(1)}s)`);
       return {
         success: false,
-        error: errorMessage,
+        error: { message: errorMessage },
       };
     } finally {
       // Restore original CONFIG
@@ -1814,7 +1816,7 @@ export class ToolHandlers {
       log.error(`❌ [TOOL] de_auth failed: ${errorMessage}`);
       return {
         success: false,
-        error: errorMessage,
+        error: { message: errorMessage },
       };
     }
   }
@@ -1891,7 +1893,7 @@ export class ToolHandlers {
         log.error(`❌ [TOOL] re_auth failed (${durationSeconds.toFixed(1)}s)`);
         return {
           success: false,
-          error: 'Re-authentication failed or was cancelled',
+          error: { message: 'Re-authentication failed or was cancelled' },
         };
       }
     } catch (error) {
@@ -1900,7 +1902,7 @@ export class ToolHandlers {
       log.error(`❌ [TOOL] re_auth failed: ${errorMessage} (${durationSeconds.toFixed(1)}s)`);
       return {
         success: false,
-        error: errorMessage,
+        error: { message: errorMessage },
       };
     } finally {
       // Restore original CONFIG
@@ -1955,7 +1957,7 @@ export class ToolHandlers {
       log.error(`❌ [TOOL] auto_discover_notebook failed: ${errorMessage}`);
       return {
         success: false,
-        error: `Auto-discovery failed: ${errorMessage}. Try using add_notebook for manual entry instead.`,
+        error: { message: `Auto-discovery failed: ${errorMessage}. Try using add_notebook for manual entry instead.` },
       };
     }
   }
@@ -1981,7 +1983,7 @@ export class ToolHandlers {
       log.error(`❌ [TOOL] add_notebook failed: ${errorMessage}`);
       return {
         success: false,
-        error: errorMessage,
+        error: { message: errorMessage },
       };
     }
   }
@@ -2014,7 +2016,7 @@ export class ToolHandlers {
       log.error(`❌ [TOOL] list_notebooks failed: ${errorMessage}`);
       return {
         success: false,
-        error: errorMessage,
+        error: { message: errorMessage },
       };
     }
   }
@@ -2032,7 +2034,7 @@ export class ToolHandlers {
         log.warning(`⚠️  [TOOL] Notebook not found: ${args.id}`);
         return {
           success: false,
-          error: `Notebook not found: ${args.id}`,
+          error: { message: `Notebook not found: ${args.id}` },
         };
       }
 
@@ -2046,7 +2048,7 @@ export class ToolHandlers {
       log.error(`❌ [TOOL] get_notebook failed: ${errorMessage}`);
       return {
         success: false,
-        error: errorMessage,
+        error: { message: errorMessage },
       };
     }
   }
@@ -2072,7 +2074,7 @@ export class ToolHandlers {
       log.error(`❌ [TOOL] select_notebook failed: ${errorMessage}`);
       return {
         success: false,
-        error: errorMessage,
+        error: { message: errorMessage },
       };
     }
   }
@@ -2098,7 +2100,7 @@ export class ToolHandlers {
       log.error(`❌ [TOOL] update_notebook failed: ${errorMessage}`);
       return {
         success: false,
-        error: errorMessage,
+        error: { message: errorMessage },
       };
     }
   }
@@ -2118,7 +2120,7 @@ export class ToolHandlers {
         log.warning(`⚠️  [TOOL] Notebook not found: ${args.id}`);
         return {
           success: false,
-          error: `Notebook not found: ${args.id}`,
+          error: { message: `Notebook not found: ${args.id}` },
         };
       }
 
@@ -2134,7 +2136,7 @@ export class ToolHandlers {
         log.warning(`⚠️  [TOOL] Notebook not found: ${args.id}`);
         return {
           success: false,
-          error: `Notebook not found: ${args.id}`,
+          error: { message: `Notebook not found: ${args.id}` },
         };
       }
     } catch (error) {
@@ -2142,7 +2144,7 @@ export class ToolHandlers {
       log.error(`❌ [TOOL] remove_notebook failed: ${errorMessage}`);
       return {
         success: false,
-        error: errorMessage,
+        error: { message: errorMessage },
       };
     }
   }
@@ -2168,7 +2170,7 @@ export class ToolHandlers {
       log.error(`❌ [TOOL] search_notebooks failed: ${errorMessage}`);
       return {
         success: false,
-        error: errorMessage,
+        error: { message: errorMessage },
       };
     }
   }
@@ -2191,7 +2193,7 @@ export class ToolHandlers {
       log.error(`❌ [TOOL] get_library_stats failed: ${errorMessage}`);
       return {
         success: false,
-        error: errorMessage,
+        error: { message: errorMessage },
       };
     }
   }
@@ -2293,7 +2295,7 @@ export class ToolHandlers {
       log.error(`❌ [TOOL] cleanup_data failed: ${errorMessage}`);
       return {
         success: false,
-        error: errorMessage,
+        error: { message: errorMessage },
       };
     }
   }
@@ -2334,7 +2336,7 @@ export class ToolHandlers {
       if (!resolvedNotebookUrl) {
         return {
           success: false,
-          error: 'No notebook URL provided and no active notebook set',
+          error: { message: 'No notebook URL provided and no active notebook set' },
         };
       }
 
@@ -2349,7 +2351,7 @@ export class ToolHandlers {
       if (!page) {
         return {
           success: false,
-          error: 'Could not access browser page - session may not be initialized',
+          error: { message: 'Could not access browser page - session may not be initialized' },
         };
       }
 
@@ -2374,14 +2376,14 @@ export class ToolHandlers {
       return {
         success: result.success,
         data: result,
-        error: result.error,
+        error: result.error ? (typeof result.error === 'string' ? { message: result.error } : result.error) : undefined,
       };
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
       log.error(`❌ [TOOL] add_source failed: ${errorMessage}`);
       return {
         success: false,
-        error: errorMessage,
+        error: { message: errorMessage },
       };
     }
   }
@@ -2409,7 +2411,7 @@ export class ToolHandlers {
     if (!source_id && !source_name) {
       return {
         success: false,
-        error: 'Either source_id or source_name is required to identify the source to delete',
+        error: { message: 'Either source_id or source_name is required to identify the source to delete' },
       };
     }
 
@@ -2420,7 +2422,7 @@ export class ToolHandlers {
       if (!resolvedNotebookUrl) {
         return {
           success: false,
-          error: 'No notebook URL provided and no active notebook set',
+          error: { message: 'No notebook URL provided and no active notebook set' },
         };
       }
 
@@ -2431,7 +2433,7 @@ export class ToolHandlers {
       if (!page) {
         return {
           success: false,
-          error: 'Could not access browser page - session may not be initialized',
+          error: { message: 'Could not access browser page - session may not be initialized' },
         };
       }
 
@@ -2453,14 +2455,14 @@ export class ToolHandlers {
       return {
         success: result.success,
         data: result,
-        error: result.error,
+        error: result.error ? (typeof result.error === 'string' ? { message: result.error } : result.error) : undefined,
       };
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
       log.error(`❌ [TOOL] delete_source failed: ${errorMessage}`);
       return {
         success: false,
-        error: errorMessage,
+        error: { message: errorMessage },
       };
     }
   }
@@ -2514,7 +2516,7 @@ export class ToolHandlers {
       if (!resolvedNotebookUrl) {
         return {
           success: false,
-          error: 'No notebook URL provided and no active notebook set',
+          error: { message: 'No notebook URL provided and no active notebook set' },
         };
       }
 
@@ -2525,7 +2527,7 @@ export class ToolHandlers {
       if (!page) {
         return {
           success: false,
-          error: 'Could not access browser page',
+          error: { message: 'Could not access browser page' },
         };
       }
 
@@ -2554,14 +2556,14 @@ export class ToolHandlers {
       return {
         success: result.success,
         data: result,
-        error: result.error,
+        error: result.error ? (typeof result.error === 'string' ? { message: result.error } : result.error) : undefined,
       };
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
       log.error(`❌ [TOOL] generate_content failed: ${errorMessage}`);
       return {
         success: false,
-        error: errorMessage,
+        error: { message: errorMessage },
       };
     }
   }
@@ -2584,7 +2586,7 @@ export class ToolHandlers {
       if (!resolvedNotebookUrl) {
         return {
           success: false,
-          error: 'No notebook URL provided and no active notebook set',
+          error: { message: 'No notebook URL provided and no active notebook set' },
         };
       }
 
@@ -2595,7 +2597,7 @@ export class ToolHandlers {
       if (!page) {
         return {
           success: false,
-          error: 'Could not access browser page',
+          error: { message: 'Could not access browser page' },
         };
       }
 
@@ -2616,7 +2618,7 @@ export class ToolHandlers {
       log.error(`❌ [TOOL] list_content failed: ${errorMessage}`);
       return {
         success: false,
-        error: errorMessage,
+        error: { message: errorMessage },
       };
     }
   }
@@ -2642,7 +2644,7 @@ export class ToolHandlers {
       if (!resolvedNotebookUrl) {
         return {
           success: false,
-          error: 'No notebook URL provided and no active notebook set',
+          error: { message: 'No notebook URL provided and no active notebook set' },
         };
       }
 
@@ -2653,7 +2655,7 @@ export class ToolHandlers {
       if (!page) {
         return {
           success: false,
-          error: 'Could not access browser page',
+          error: { message: 'Could not access browser page' },
         };
       }
 
@@ -2681,14 +2683,14 @@ export class ToolHandlers {
       return {
         success: result.success,
         data: result,
-        error: result.error,
+        error: result.error ? (typeof result.error === 'string' ? { message: result.error } : result.error) : undefined,
       };
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
       log.error(`❌ [TOOL] download_content failed: ${errorMessage}`);
       return {
         success: false,
-        error: errorMessage,
+        error: { message: errorMessage },
       };
     }
   }
@@ -2715,14 +2717,14 @@ export class ToolHandlers {
       if (!title || title.trim().length === 0) {
         return {
           success: false,
-          error: 'Note title is required',
+          error: { message: 'Note title is required' },
         };
       }
 
       if (!content || content.trim().length === 0) {
         return {
           success: false,
-          error: 'Note content is required',
+          error: { message: 'Note content is required' },
         };
       }
 
@@ -2732,7 +2734,7 @@ export class ToolHandlers {
       if (!resolvedNotebookUrl) {
         return {
           success: false,
-          error: 'No notebook URL provided and no active notebook set',
+          error: { message: 'No notebook URL provided and no active notebook set' },
         };
       }
 
@@ -2743,7 +2745,7 @@ export class ToolHandlers {
       if (!page) {
         return {
           success: false,
-          error: 'Could not access browser page',
+          error: { message: 'Could not access browser page' },
         };
       }
 
@@ -2765,14 +2767,14 @@ export class ToolHandlers {
       return {
         success: result.success,
         data: result,
-        error: result.error,
+        error: result.error ? (typeof result.error === 'string' ? { message: result.error } : result.error) : undefined,
       };
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
       log.error(`❌ [TOOL] create_note failed: ${errorMessage}`);
       return {
         success: false,
-        error: errorMessage,
+        error: { message: errorMessage },
       };
     }
   }
@@ -2801,7 +2803,7 @@ export class ToolHandlers {
       if (!resolvedNotebookUrl) {
         return {
           success: false,
-          error: 'No notebook URL provided and no active notebook set',
+          error: { message: 'No notebook URL provided and no active notebook set' },
         };
       }
 
@@ -2812,7 +2814,7 @@ export class ToolHandlers {
       if (!page) {
         return {
           success: false,
-          error: 'Could not access browser page',
+          error: { message: 'Could not access browser page' },
         };
       }
 
@@ -2835,14 +2837,14 @@ export class ToolHandlers {
       return {
         success: result.success,
         data: result,
-        error: result.error,
+        error: result.error ? (typeof result.error === 'string' ? { message: result.error } : result.error) : undefined,
       };
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
       log.error(`❌ [TOOL] save_chat_to_note failed: ${errorMessage}`);
       return {
         success: false,
-        error: errorMessage,
+        error: { message: errorMessage },
       };
     }
   }
@@ -2868,7 +2870,7 @@ export class ToolHandlers {
       if (!note_title || note_title.trim().length === 0) {
         return {
           success: false,
-          error: 'Note title is required',
+          error: { message: 'Note title is required' },
         };
       }
 
@@ -2878,7 +2880,7 @@ export class ToolHandlers {
       if (!resolvedNotebookUrl) {
         return {
           success: false,
-          error: 'No notebook URL provided and no active notebook set',
+          error: { message: 'No notebook URL provided and no active notebook set' },
         };
       }
 
@@ -2889,7 +2891,7 @@ export class ToolHandlers {
       if (!page) {
         return {
           success: false,
-          error: 'Could not access browser page',
+          error: { message: 'Could not access browser page' },
         };
       }
 
@@ -2912,14 +2914,14 @@ export class ToolHandlers {
       return {
         success: result.success,
         data: result,
-        error: result.error,
+        error: result.error ? (typeof result.error === 'string' ? { message: result.error } : result.error) : undefined,
       };
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
       log.error(`❌ [TOOL] convert_note_to_source failed: ${errorMessage}`);
       return {
         success: false,
-        error: errorMessage,
+        error: { message: errorMessage },
       };
     }
   }
@@ -3118,7 +3120,7 @@ export class ToolHandlers {
       log.error(`❌ [TOOL] list_notebooks_from_nblm failed: ${errorMessage}`);
       return {
         success: false,
-        error: errorMessage,
+        error: { message: errorMessage },
       };
     }
   }
@@ -3281,7 +3283,7 @@ export class ToolHandlers {
       log.error(`❌ [TOOL] delete_notebooks_from_nblm failed: ${errorMessage}`);
       return {
         success: false,
-        error: errorMessage,
+        error: { message: errorMessage },
       };
     }
   }
@@ -3437,7 +3439,7 @@ export class ToolHandlers {
       log.error(`❌ [TOOL] create_notebook failed: ${errorMessage}`);
       return {
         success: false,
-        error: errorMessage,
+        error: { message: errorMessage },
       };
     }
   }

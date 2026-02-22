@@ -335,7 +335,9 @@ app.post('/notebooks/import-from-scrape', async (req: Request, res: Response) =>
             errors.push({
               id: notebook.id,
               name: notebook.name,
-              error: discoverResult.error || 'Auto-discovery failed',
+              error: typeof discoverResult.error === 'string' 
+                ? discoverResult.error 
+                : discoverResult.error?.message || 'Auto-discovery failed',
             });
           }
         } else {
@@ -353,7 +355,9 @@ app.post('/notebooks/import-from-scrape', async (req: Request, res: Response) =>
             errors.push({
               id: notebook.id,
               name: notebook.name,
-              error: addResult.error || 'Add failed',
+              error: typeof addResult.error === 'string'
+                ? addResult.error
+                : addResult.error?.message || 'Add failed',
             });
           }
         }
@@ -668,7 +672,7 @@ app.delete('/content/sources/:id', async (req: Request, res: Response) => {
 
     if (!result.success) {
       // Return 404 if source not found
-      if (result.error?.includes('not found')) {
+      if (result.error?.message?.includes('not found')) {
         return res.status(404).json(result);
       }
       return res.status(500).json(result);
@@ -704,7 +708,7 @@ app.delete('/content/sources', async (req: Request, res: Response) => {
 
     if (!result.success) {
       // Return 404 if source not found
-      if (result.error?.includes('not found')) {
+      if (result.error?.message?.includes('not found')) {
         return res.status(404).json(result);
       }
       return res.status(500).json(result);
