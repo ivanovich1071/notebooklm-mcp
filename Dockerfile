@@ -1,95 +1,67 @@
-# =========================
-# ===== BUILD STAGE ======
-# =========================
+# --- BUILD STAGE ---
+# Use Node.js for building the application
 FROM node:20-bookworm-slim AS builder
 
-ENV NODE_ENV=development
-
-# Install system deps required for build + Chromium
+# Install system dependencies required for the build process (including TypeScript compilation and i18n copy)
+# We don't install Playwright browsers here, as the final stage will handle that.
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    libnss3 \
-    libnspr4 \
-    libatk1.0-0 \
-    libatk-bridge2.0-0 \
-    libcups2 \
-    libdrm2 \
-    libdbus-1-3 \
-    libxkbcommon0 \
-    libatspi2.0-0 \
-    libxcomposite1 \
-    libxdamage1 \
-    libxfixes3 \
-    libxrandr2 \
-    libgbm1 \
-    libasound2 \
-    libpango-1.0-0 \
-    libcairo2 \
-    xvfb \
-    x11vnc \
-    novnc \
-    websockify \
-    fluxbox \
-    fonts-liberation \
-    wget \
+    # Dependencies potentially needed for Node.js native modules compilation during npm install
+    python3 \
+    make \
+    g++ \
+    # Utilities
     ca-certificates \
+    wget \
     procps \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
-# Install dependencies first (better layer caching)
+# Copy package files first (for better caching)
 COPY package*.json ./
-RUN npm ci --include=dev
 
-# Copy project
+# Install ALL dependencies (including devDependencies) for the build
+RUN npm ci --include=dev --ignore-scripts
+
+# Copy source code needed for build
 COPY . .
 
-# Build project (FAIL if build fails)
+# Build the project: compile TypeScript and copy i18n assets
 RUN npm run build
 
-# Verify build output
+# Verify build output (optional, can help catch issues early)
 RUN test -f dist/index.js
-RUN test -f dist/i18n/fr.json
-RUN test -f dist/i18n/en.json
+RUN test -f dist/i18n/en.json || test -f dist/i18n/fr.json # Assuming at least one i18n file exists
 
-# =========================
-# ===== FINAL STAGE ======
-# =========================
-FROM node:20-bookworm-slim AS final
+# --- FINAL STAGE ---
+# Use the official Playwright image as the base - contains browsers and system deps
+FROM mcr.microsoft.com/playwright:v1.57.0-jammy
 
-ENV NODE_ENV=production
-
-# Runtime system deps
+# Install *only* essential system dependencies not covered by the Playwright image
+# (e.g., specific fonts, noVNC components if needed separately, but often Playwright image covers Playwright/Chromium deps well)
+# For this project, the Playwright image should cover most Chromium deps.
+# We might still need noVNC dependencies if they are not included.
+# Let's install the core ones needed by the application logic (Playwright interaction).
+# The Playwright image (based on Ubuntu Jammy) usually includes common GUI/X11 deps for headless Chromium.
+# If noVNC is crucial, install its server parts (novnc, websockify, fluxbox, Xvfb, x11vnc).
+# Let's assume we still need them for the VNC functionality described.
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    libnss3 \
-    libnspr4 \
-    libatk1.0-0 \
-    libatk-bridge2.0-0 \
-    libcups2 \
-    libdrm2 \
-    libdbus-1-3 \
-    libxkbcommon0 \
-    libatspi2.0-0 \
-    libxcomposite1 \
-    libxdamage1 \
-    libxfixes3 \
-    libxrandr2 \
-    libgbm1 \
-    libasound2 \
-    libpango-1.0-0 \
-    libcairo2 \
-    xvfb \
-    x11vnc \
+    # noVNC dependencies (if not already in playwright image)
     novnc \
     websockify \
     fluxbox \
-    fonts-liberation \
+    xvfb \
+    x11vnc \
+    # Additional utilities sometimes needed
     wget \
     ca-certificates \
     procps \
+    fonts-liberation \
+    fonts-noto-color-emoji \
+    # Clean up
     && rm -rf /var/lib/apt/lists/*
 
-# Create user
+# Create non-root user for security (consistent with original)
 RUN groupadd -r notebooklm && \
     useradd -r -g notebooklm -d /home/notebooklm notebooklm && \
     mkdir -p /home/notebooklm /app /data /tmp/.X11-unix && \
@@ -98,36 +70,47 @@ RUN groupadd -r notebooklm && \
 
 WORKDIR /app
 
-# Copy built app
-COPY --from=builder /app/dist ./dist
-COPY --from=builder /app/scripts ./scripts
-COPY --from=builder /app/package*.json ./
+# Copy built application and scripts from the builder stage
+COPY --from=builder --chown=notebooklm:notebooklm /app/dist ./dist
+COPY --from=builder --chown=notebooklm:notebooklm /app/scripts ./scripts
+COPY --from=builder --chown=notebooklm:notebooklm /app/package*.json ./
 
-# Install only prod deps
-RUN npm ci --omit=dev
+# Install *only* production dependencies for the final image
+RUN npm ci --omit=dev --ignore-scripts
 
-# Install Chromium via patchright
-RUN npx patchright install chromium || true
+# --- BROWSERS ARE ALREADY INSTALLED IN THE BASE IMAGE ---
+# The mcr.microsoft.com/playwright image comes with Chromium pre-installed.
+# No need to run 'npx patchright install chromium' here.
+# The PLAYWRIGHT_BROWSERS_PATH is typically set by the base image or defaults correctly within it.
+# Let's explicitly set it just to be sure, matching the Playwright image convention.
+ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
 
-# Make entrypoint executable
+# Make scripts executable (needs root)
+USER root
 RUN chmod +x /app/scripts/*.sh
-
 USER notebooklm
 
-# Environment
-ENV HTTP_PORT=3000 \
+# Environment variables
+ENV NODE_ENV=production \
+    HTTP_PORT=3000 \
     HTTP_HOST=0.0.0.0 \
     HEADLESS=true \
     NOTEBOOKLM_DATA_DIR=/data \
-    PLAYWRIGHT_BROWSERS_PATH=/home/notebooklm/.cache/ms-playwright \
+    # Playwright/Chrome settings (using the path from the Playwright image)
+    PLAYWRIGHT_BROWSERS_PATH=/ms-playwright \
+    # Display for noVNC (if used)
     DISPLAY=:99 \
     NOVNC_PORT=6080
 
+# Expose HTTP port and noVNC port
 EXPOSE 3000 6080
 
+# Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=10s --retries=3 \
-  CMD wget --no-verbose --tries=1 --spider http://localhost:3000/health || exit 1
+    CMD wget --no-verbose --tries=1 --spider http://localhost:3000/health || exit 1
 
+# Data volume
 VOLUME ["/data"]
 
+# Start with entrypoint (VNC setup + Node.js server)
 CMD ["/app/scripts/docker-entrypoint.sh"]
